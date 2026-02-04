@@ -18,13 +18,17 @@ export interface OCRResult {
 export async function extractTextFromImage(
   imageSource: string | File | Blob
 ): Promise<{ text: string; confidence: number }> {
+  console.log("Starting OCR processing...");
+
   const result = await Tesseract.recognize(imageSource, "eng", {
     logger: (m) => {
-      if (process.env.NODE_ENV === "development") {
-        console.log(m);
+      if (m.status) {
+        console.log(`OCR: ${m.status} ${m.progress ? Math.round(m.progress * 100) + '%' : ''}`);
       }
     },
   });
+
+  console.log("OCR complete!");
 
   return {
     text: result.data.text,

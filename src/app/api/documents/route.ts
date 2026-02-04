@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
-import { processDocument } from "@/lib/ocr";
 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
@@ -22,46 +21,40 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const formData = await request.formData();
-  const file = formData.get("file") as File;
-  const patientId = formData.get("patientId") as string;
-  const documentType = formData.get("documentType") as string || "OTHER";
+  const body = await request.json();
+  const {
+    patientId,
+    fileName,
+    fileType,
+    documentType = "OTHER",
+    rawText,
+    confidence,
+    medications = [],
+  } = body;
 
-  if (!file || !patientId) {
+  if (!patientId || !fileName) {
     return NextResponse.json(
-      { error: "File and patient ID are required" },
+      { error: "Patient ID and file name are required" },
       { status: 400 }
     );
   }
-
-  // Convert file to base64 for OCR processing
-  const bytes = await file.arrayBuffer();
-  const buffer = Buffer.from(bytes);
-  const base64 = `data:${file.type};base64,${buffer.toString("base64")}`;
-
-  // Process document with OCR
-  const ocrResult = await processDocument(base64);
-
-  // Store the file (in production, upload to S3/GCS/etc.)
-  // For now, we'll store the base64 temporarily
-  const fileUrl = base64; // Replace with actual file storage URL in production
 
   // Create document record
   const document = await prisma.document.create({
     data: {
       patientId,
-      fileName: file.name,
-      fileUrl,
-      fileType: file.type,
-      rawText: ocrResult.rawText,
-      processedData: ocrResult as never,
+      fileName,
+      fileUrl: "", // In production, store actual file URL
+      fileType: fileType || "image/unknown",
+      rawText: rawText || "",
+      processedData: { confidence, medications } as never,
       documentType: documentType as never,
       processedAt: new Date(),
     },
   });
 
   // Create medication records from extracted data
-  const medicationPromises = ocrResult.medications.map((med) =>
+  const medicationPromises = medications.map((med: { name: string; dosage: string; frequency: string; instructions?: string }) =>
     prisma.medication.create({
       data: {
         patientId,
@@ -75,10 +68,10 @@ export async function POST(request: NextRequest) {
     })
   );
 
-  const medications = await Promise.all(medicationPromises);
+  const createdMedications = await Promise.all(medicationPromises);
 
   // Create tasks for each medication
-  const taskPromises = medications.map((med) =>
+  const taskPromises = createdMedications.map((med) =>
     prisma.task.create({
       data: {
         patientId,
@@ -97,7 +90,7 @@ export async function POST(request: NextRequest) {
 
   return NextResponse.json({
     document,
-    medications,
-    ocrConfidence: ocrResult.confidence,
+    medications: createdMedications,
+    ocrConfidence: confidence,
   }, { status: 201 });
 }
