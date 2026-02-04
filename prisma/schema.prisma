@@ -1,0 +1,172 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  name          String?
+  password      String?
+  role          Role      @default(FAMILY_MEMBER)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Relations
+  patient       Patient?  @relation("PatientUser")
+  familyOf      Patient[] @relation("FamilyMembers")
+  notifications Notification[]
+}
+
+model Patient {
+  id              String   @id @default(cuid())
+  userId          String   @unique
+  user            User     @relation("PatientUser", fields: [userId], references: [id], onDelete: Cascade)
+  dateOfBirth     DateTime?
+  medicalNotes    String?
+  emergencyContact String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  // Relations
+  familyMembers   User[]       @relation("FamilyMembers")
+  tasks           Task[]
+  medications     Medication[]
+  documents       Document[]
+}
+
+model Task {
+  id          String     @id @default(cuid())
+  patientId   String
+  patient     Patient    @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  title       String
+  description String?
+  dueDate     DateTime?
+  dueTime     String?    // Time of day (e.g., "09:00", "14:30")
+  isRecurring Boolean    @default(false)
+  recurrence  String?    // "daily", "weekly", "monthly"
+  priority    Priority   @default(MEDIUM)
+  status      TaskStatus @default(PENDING)
+  category    TaskCategory @default(OTHER)
+  completedAt DateTime?
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  // Link to medication if this is a medication task
+  medicationId String?
+  medication   Medication? @relation(fields: [medicationId], references: [id])
+
+  notifications Notification[]
+}
+
+model Medication {
+  id           String   @id @default(cuid())
+  patientId    String
+  patient      Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  name         String
+  dosage       String
+  frequency    String   // "once daily", "twice daily", "every 8 hours", etc.
+  instructions String?
+  startDate    DateTime
+  endDate      DateTime?
+  prescriber   String?
+  pharmacy     String?
+  refillDate   DateTime?
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Extracted from document
+  documentId   String?
+  document     Document? @relation(fields: [documentId], references: [id])
+
+  tasks        Task[]
+}
+
+model Document {
+  id            String       @id @default(cuid())
+  patientId     String
+  patient       Patient      @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  fileName      String
+  fileUrl       String
+  fileType      String
+  rawText       String?      @db.Text // OCR extracted text
+  processedData Json?        // Structured data extracted from OCR
+  documentType  DocumentType @default(OTHER)
+  uploadedAt    DateTime     @default(now())
+  processedAt   DateTime?
+
+  medications   Medication[]
+}
+
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  taskId    String?
+  task      Task?            @relation(fields: [taskId], references: [id])
+  type      NotificationType
+  title     String
+  message   String
+  isRead    Boolean          @default(false)
+  sentAt    DateTime         @default(now())
+  readAt    DateTime?
+
+  // Delivery status
+  emailSent Boolean @default(false)
+  pushSent  Boolean @default(false)
+}
+
+enum Role {
+  PATIENT
+  FAMILY_MEMBER
+  CAREGIVER
+  ADMIN
+}
+
+enum TaskStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  SKIPPED
+  OVERDUE
+}
+
+enum Priority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum TaskCategory {
+  MEDICATION
+  APPOINTMENT
+  EXERCISE
+  MEAL
+  HYDRATION
+  PERSONAL_CARE
+  SOCIAL
+  OTHER
+}
+
+enum DocumentType {
+  DISCHARGE_SUMMARY
+  PRESCRIPTION
+  LAB_RESULTS
+  INSURANCE
+  OTHER
+}
+
+enum NotificationType {
+  TASK_REMINDER
+  TASK_COMPLETED
+  TASK_OVERDUE
+  MEDICATION_REFILL
+  APPOINTMENT_REMINDER
+  SYSTEM
+}
