@@ -2,14 +2,15 @@
 
 import { useState, useCallback } from "react";
 import { useDropzone } from "react-dropzone";
-import { Upload, FileText, Loader2, CheckCircle, AlertCircle } from "lucide-react";
-import { processDocumentClient } from "@/lib/ocr-client";
+import { Upload, FileText, Loader2, CheckCircle, AlertCircle, Sparkles, Building2, User } from "lucide-react";
 
 interface ExtractedMedication {
   name: string;
   dosage: string;
   frequency: string;
   instructions?: string;
+  quantity?: string;
+  refills?: string;
 }
 
 interface ScanResult {
@@ -18,7 +19,8 @@ interface ScanResult {
     fileName: string;
   };
   medications: ExtractedMedication[];
-  ocrConfidence: number;
+  pharmacy?: string;
+  prescriber?: string;
   rawText?: string;
 }
 
@@ -29,7 +31,7 @@ interface DocumentScannerProps {
 
 export function DocumentScanner({ patientId, onScanComplete }: DocumentScannerProps) {
   const [isProcessing, setIsProcessing] = useState(false);
-  const [progress, setProgress] = useState<{ status: string; percent: number } | null>(null);
+  const [status, setStatus] = useState<string>("");
   const [result, setResult] = useState<ScanResult | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -41,52 +43,34 @@ export function DocumentScanner({ patientId, onScanComplete }: DocumentScannerPr
       setIsProcessing(true);
       setError(null);
       setResult(null);
-      setProgress({ status: "Starting OCR...", percent: 0 });
+      setStatus("Uploading image...");
 
       try {
-        // Step 1: Run OCR on the client side
-        const ocrResult = await processDocumentClient(file, (status, prog) => {
-          setProgress({ status, percent: Math.round(prog * 100) });
-        });
+        setStatus("AI analyzing prescription...");
 
-        setProgress({ status: "Saving to database...", percent: 100 });
+        // Send image directly to GPT-4 Vision API
+        const formData = new FormData();
+        formData.append("file", file);
+        formData.append("patientId", patientId);
 
-        // Step 2: Send results to API to save
-        const response = await fetch("/api/documents", {
+        const response = await fetch("/api/scan-document", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            patientId,
-            fileName: file.name,
-            fileType: file.type,
-            documentType: "DISCHARGE_SUMMARY",
-            rawText: ocrResult.rawText,
-            confidence: ocrResult.confidence,
-            medications: ocrResult.medications,
-          }),
+          body: formData,
         });
 
         if (!response.ok) {
-          throw new Error("Failed to save document");
+          const errorData = await response.json();
+          throw new Error(errorData.error || "Failed to process document");
         }
 
         const data = await response.json();
-        setResult({
-          document: data.document,
-          medications: ocrResult.medications,
-          ocrConfidence: ocrResult.confidence,
-          rawText: ocrResult.rawText,
-        });
-        onScanComplete?.({
-          document: data.document,
-          medications: ocrResult.medications,
-          ocrConfidence: ocrResult.confidence,
-        });
+        setResult(data);
+        onScanComplete?.(data);
       } catch (err) {
         setError(err instanceof Error ? err.message : "An error occurred");
       } finally {
         setIsProcessing(false);
-        setProgress(null);
+        setStatus("");
       }
     },
     [patientId, onScanComplete]
@@ -95,8 +79,7 @@ export function DocumentScanner({ patientId, onScanComplete }: DocumentScannerPr
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
     accept: {
-      "image/*": [".png", ".jpg", ".jpeg", ".gif", ".bmp"],
-      "application/pdf": [".pdf"],
+      "image/*": [".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp"],
     },
     maxFiles: 1,
     disabled: isProcessing,
@@ -118,19 +101,10 @@ export function DocumentScanner({ patientId, onScanComplete }: DocumentScannerPr
             <>
               <Loader2 className="w-10 h-10 text-blue-500 animate-spin" />
               <p className="text-gray-600 font-medium">Processing document...</p>
-              {progress && (
-                <>
-                  <p className="text-sm text-blue-600">{progress.status}</p>
-                  <div className="w-48 bg-gray-200 rounded-full h-2 mt-2">
-                    <div
-                      className="bg-blue-600 h-2 rounded-full transition-all duration-300"
-                      style={{ width: `${progress.percent}%` }}
-                    />
-                  </div>
-                  <p className="text-xs text-gray-400">{progress.percent}%</p>
-                </>
-              )}
-              <p className="text-xs text-gray-400 mt-2">First scan downloads OCR data (~15MB)</p>
+              <p className="text-sm text-blue-600 flex items-center gap-1">
+                <Sparkles className="w-3 h-3" />
+                {status}
+              </p>
             </>
           ) : (
             <>
@@ -138,9 +112,12 @@ export function DocumentScanner({ patientId, onScanComplete }: DocumentScannerPr
               <p className="text-gray-600">
                 {isDragActive
                   ? "Drop the document here"
-                  : "Drag & drop discharge papers or prescription"}
+                  : "Drag & drop prescription or discharge papers"}
               </p>
-              <p className="text-sm text-gray-400">Supports images (PNG, JPG)</p>
+              <p className="text-sm text-gray-400 flex items-center gap-1">
+                <Sparkles className="w-3 h-3 text-purple-500" />
+                Powered by GPT-4 Vision
+              </p>
             </>
           )}
         </div>
@@ -161,16 +138,32 @@ export function DocumentScanner({ patientId, onScanComplete }: DocumentScannerPr
           <div className="flex items-start gap-3">
             <CheckCircle className="w-5 h-5 text-green-500 flex-shrink-0 mt-0.5" />
             <div>
-              <p className="font-medium text-green-800">Document Processed Successfully</p>
-              <p className="text-sm text-green-600">
-                Confidence: {Math.round(result.ocrConfidence)}%
-              </p>
+              <p className="font-medium text-green-800">Document Analyzed Successfully</p>
             </div>
           </div>
 
-          {result.medications.length > 0 && (
+          {/* Pharmacy and Prescriber info */}
+          {(result.pharmacy || result.prescriber) && (
+            <div className="flex flex-wrap gap-4 text-sm text-gray-600">
+              {result.pharmacy && (
+                <span className="flex items-center gap-1">
+                  <Building2 className="w-4 h-4" />
+                  {result.pharmacy}
+                </span>
+              )}
+              {result.prescriber && (
+                <span className="flex items-center gap-1">
+                  <User className="w-4 h-4" />
+                  Dr. {result.prescriber}
+                </span>
+              )}
+            </div>
+          )}
+
+          {result.medications && result.medications.length > 0 && (
             <div className="mt-4">
-              <p className="font-medium text-gray-700 mb-2">
+              <p className="font-medium text-gray-700 mb-2 flex items-center gap-1">
+                <Sparkles className="w-4 h-4 text-purple-500" />
                 Extracted Medications ({result.medications.length}):
               </p>
               <div className="space-y-2">
@@ -180,7 +173,7 @@ export function DocumentScanner({ patientId, onScanComplete }: DocumentScannerPr
                     className="bg-white rounded-md p-3 border border-green-100 flex items-start gap-3"
                   >
                     <FileText className="w-4 h-4 text-green-600 flex-shrink-0 mt-1" />
-                    <div>
+                    <div className="flex-1">
                       <p className="font-medium text-gray-800">{med.name}</p>
                       <p className="text-sm text-gray-600">
                         {med.dosage} • {med.frequency}
@@ -188,23 +181,33 @@ export function DocumentScanner({ patientId, onScanComplete }: DocumentScannerPr
                       {med.instructions && (
                         <p className="text-sm text-gray-500 mt-1">{med.instructions}</p>
                       )}
+                      {(med.quantity || med.refills) && (
+                        <p className="text-xs text-gray-400 mt-1">
+                          {med.quantity && `Qty: ${med.quantity}`}
+                          {med.quantity && med.refills && " • "}
+                          {med.refills && `Refills: ${med.refills}`}
+                        </p>
+                      )}
                     </div>
                   </div>
                 ))}
               </div>
+              <p className="text-xs text-green-600 mt-3">
+                Tasks have been created for each medication.
+              </p>
             </div>
           )}
 
-          {result.medications.length === 0 && (
+          {(!result.medications || result.medications.length === 0) && (
             <p className="text-sm text-amber-600 mt-2">
-              No medications were automatically detected. You may need to add them manually.
+              No medications were detected. The image may be unclear or not contain prescription information.
             </p>
           )}
 
           {result.rawText && (
             <details className="mt-4">
               <summary className="text-sm text-gray-500 cursor-pointer hover:text-gray-700">
-                Show extracted text (for debugging)
+                Show what AI read from the document
               </summary>
               <pre className="mt-2 p-3 bg-gray-100 rounded text-xs text-gray-700 whitespace-pre-wrap max-h-48 overflow-y-auto">
                 {result.rawText}
