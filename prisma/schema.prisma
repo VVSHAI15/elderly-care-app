@@ -78,6 +78,19 @@ model Patient {
   tasks           Task[]
   medications     Medication[]
   documents       Document[]
+  inviteCodes     InviteCode[]
+}
+
+model InviteCode {
+  id        String   @id @default(cuid())
+  code      String   @unique
+  patientId String
+  patient   Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  createdBy String   // User ID who created the invite
+  usedBy    String?  // User ID who used the invite
+  usedAt    DateTime?
+  expiresAt DateTime
+  createdAt DateTime @default(now())
 }
 
 model Task {
