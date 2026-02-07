@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
-import { notifyFamilyOfTaskCompletion } from "@/lib/notifications";
+import { notifyFamilyOfTaskCompletion, sendNotification } from "@/lib/notifications";
 import { pusherServer, getPatientChannel, PUSHER_EVENTS } from "@/lib/pusher";
 
 export async function GET(request: NextRequest) {
@@ -21,6 +21,13 @@ export async function GET(request: NextRequest) {
     },
     include: {
       medication: true,
+      assignedTo: {
+        select: {
+          id: true,
+          name: true,
+          role: true,
+        },
+      },
     },
     orderBy: [{ dueDate: "asc" }, { dueTime: "asc" }],
   });
@@ -43,14 +50,33 @@ export async function POST(request: NextRequest) {
       priority: body.priority || "MEDIUM",
       category: body.category || "OTHER",
       medicationId: body.medicationId,
+      assignedToId: body.assignedToId || null,
     },
     include: {
       medication: true,
+      assignedTo: {
+        select: {
+          id: true,
+          name: true,
+          role: true,
+        },
+      },
     },
   });
 
   // Notify via Pusher
   await pusherServer.trigger(getPatientChannel(body.patientId), PUSHER_EVENTS.TASK_CREATED, task);
+
+  // Notify the assigned user
+  if (body.assignedToId) {
+    await sendNotification({
+      userId: body.assignedToId,
+      taskId: task.id,
+      type: "TASK_REMINDER",
+      title: "New task assigned to you",
+      message: `"${task.title}" has been assigned to you.${task.dueTime ? ` Due at ${task.dueTime}.` : ""}`,
+    });
+  }
 
   return NextResponse.json(task, { status: 201 });
 }
@@ -63,6 +89,11 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ error: "Task ID is required" }, { status: 400 });
   }
 
+  // Handle dueDate conversion
+  if (updateData.dueDate) {
+    updateData.dueDate = new Date(updateData.dueDate);
+  }
+
   // Handle task completion
   if (updateData.status === "COMPLETED") {
     updateData.completedAt = new Date();
@@ -73,6 +104,13 @@ export async function PATCH(request: NextRequest) {
     data: updateData,
     include: {
       medication: true,
+      assignedTo: {
+        select: {
+          id: true,
+          name: true,
+          role: true,
+        },
+      },
       patient: {
         include: {
           user: true,

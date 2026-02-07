@@ -13,6 +13,13 @@ export async function GET(request: NextRequest) {
     where: { patientId },
     include: {
       medications: true,
+      uploadedBy: {
+        select: {
+          id: true,
+          name: true,
+          role: true,
+        },
+      },
     },
     orderBy: { uploadedAt: "desc" },
   });

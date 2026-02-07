@@ -3,13 +3,16 @@
 import { useState, useEffect, useCallback } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { Heart, Plus, Upload, Settings, LogOut, Loader2, Users } from "lucide-react";
+import { Heart, Plus, Upload, Settings, LogOut, Loader2, Users, History, Pill } from "lucide-react";
 import { signOut } from "next-auth/react";
 import { DocumentScanner } from "@/components/documents/DocumentScanner";
 import { TaskList } from "@/components/tasks/TaskList";
+import { AddTaskModal } from "@/components/tasks/AddTaskModal";
 import { NotificationBell } from "@/components/notifications/NotificationBell";
 import { InviteManager } from "@/components/connections/InviteManager";
 import { ConnectToPatient } from "@/components/connections/ConnectToPatient";
+import { UploadHistory } from "@/components/documents/UploadHistory";
+import { MedicationsList } from "@/components/medications/MedicationsList";
 
 interface PatientData {
   id: string;
@@ -36,13 +39,15 @@ interface ConnectedPatient {
 export default function DashboardPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<"tasks" | "scan" | "medications" | "connections">("tasks");
+  const [activeTab, setActiveTab] = useState<"tasks" | "scan" | "medications" | "connections" | "history">("tasks");
   const [showAddTask, setShowAddTask] = useState(false);
   const [patient, setPatient] = useState<PatientData | null>(null);
   const [connections, setConnections] = useState<Connection[]>([]);
   const [connectedPatients, setConnectedPatients] = useState<ConnectedPatient[]>([]);
   const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [taskListKey, setTaskListKey] = useState(0);
+  const [medicationsKey, setMedicationsKey] = useState(0);
 
   const fetchConnections = useCallback(async () => {
     try {
@@ -92,9 +97,29 @@ export default function DashboardPage() {
     }
   }, [session, fetchConnections]);
 
+  // Check for overdue tasks and generate recurring tasks on dashboard load
+  useEffect(() => {
+    async function onDashboardLoad() {
+      if (currentPatientId) {
+        try {
+          await Promise.all([
+            fetch(`/api/cron/check-overdue?patientId=${currentPatientId}`),
+            fetch(`/api/cron/generate-recurring?patientId=${currentPatientId}`),
+          ]);
+        } catch (error) {
+          console.error("Failed background checks:", error);
+        }
+      }
+    }
+
+    if (!loading && currentPatientId) {
+      onDashboardLoad();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading]);
+
   const handleSelectPatient = async (patientId: string) => {
     setSelectedPatientId(patientId);
-    // Fetch the selected patient's data
     try {
       const response = await fetch(`/api/patients/${patientId}`);
       if (response.ok) {
@@ -164,15 +189,15 @@ export default function DashboardPage() {
             Welcome, {userName}!
           </h1>
           {isPatient && patient ? (
-            <p className="text-gray-600">
+            <p className="text-gray-700">
               Manage your medications, tasks, and connections below.
             </p>
           ) : !isPatient && connectedPatients.length > 0 ? (
-            <p className="text-gray-600">
+            <p className="text-gray-700">
               You&apos;re caring for {connectedPatients.length} patient{connectedPatients.length > 1 ? "s" : ""}.
             </p>
           ) : !isPatient ? (
-            <p className="text-gray-600">
+            <p className="text-gray-700">
               Connect with a patient to start helping with their care.
             </p>
           ) : null}
@@ -187,7 +212,7 @@ export default function DashboardPage() {
                 className={`px-4 py-2 rounded-lg font-medium transition-colors ${
                   activeTab === "tasks"
                     ? "bg-blue-600 text-white"
-                    : "bg-white text-gray-600 hover:bg-gray-50 border border-gray-200"
+                    : "bg-white text-gray-700 hover:bg-gray-50 border border-gray-200"
                 }`}
               >
                 Today&apos;s Tasks
@@ -197,20 +222,32 @@ export default function DashboardPage() {
                 className={`px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2 ${
                   activeTab === "scan"
                     ? "bg-blue-600 text-white"
-                    : "bg-white text-gray-600 hover:bg-gray-50 border border-gray-200"
+                    : "bg-white text-gray-700 hover:bg-gray-50 border border-gray-200"
                 }`}
               >
                 <Upload className="w-4 h-4" />
                 Scan Document
               </button>
               <button
-                onClick={() => setActiveTab("medications")}
-                className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-                  activeTab === "medications"
+                onClick={() => setActiveTab("history")}
+                className={`px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2 ${
+                  activeTab === "history"
                     ? "bg-blue-600 text-white"
-                    : "bg-white text-gray-600 hover:bg-gray-50 border border-gray-200"
+                    : "bg-white text-gray-700 hover:bg-gray-50 border border-gray-200"
                 }`}
               >
+                <History className="w-4 h-4" />
+                Upload History
+              </button>
+              <button
+                onClick={() => setActiveTab("medications")}
+                className={`px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2 ${
+                  activeTab === "medications"
+                    ? "bg-blue-600 text-white"
+                    : "bg-white text-gray-700 hover:bg-gray-50 border border-gray-200"
+                }`}
+              >
+                <Pill className="w-4 h-4" />
                 Medications
               </button>
             </>
@@ -220,7 +257,7 @@ export default function DashboardPage() {
             className={`px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2 ${
               activeTab === "connections"
                 ? "bg-blue-600 text-white"
-                : "bg-white text-gray-600 hover:bg-gray-50 border border-gray-200"
+                : "bg-white text-gray-700 hover:bg-gray-50 border border-gray-200"
             }`}
           >
             <Users className="w-4 h-4" />
@@ -242,7 +279,11 @@ export default function DashboardPage() {
                   Add Task
                 </button>
               </div>
-              <TaskList patientId={currentPatientId} />
+              <TaskList
+                key={taskListKey}
+                patientId={currentPatientId}
+                connections={connections}
+              />
             </div>
           )}
 
@@ -251,30 +292,39 @@ export default function DashboardPage() {
               <h2 className="text-lg font-semibold text-gray-800 mb-4">
                 Scan Discharge Papers
               </h2>
-              <p className="text-gray-600 mb-6">
-                Upload a photo or PDF of discharge papers or prescriptions. We&apos;ll
-                automatically extract medication information and create tasks.
+              <p className="text-gray-700 mb-6">
+                Upload a photo, PDF, or image of discharge papers or prescriptions. We&apos;ll
+                automatically extract medication information. You&apos;ll be able to review
+                and edit before saving.
               </p>
               <DocumentScanner
                 patientId={currentPatientId}
-                onScanComplete={(result) => {
-                  console.log("Scan complete:", result);
-                  if (result.medications.length > 0) {
-                    setActiveTab("tasks");
-                  }
+                onScanComplete={() => {
+                  setTaskListKey((k) => k + 1);
+                  setMedicationsKey((k) => k + 1);
                 }}
               />
+            </div>
+          )}
+
+          {activeTab === "history" && currentPatientId && (
+            <div>
+              <h2 className="text-lg font-semibold text-gray-800 mb-4">
+                Upload History
+              </h2>
+              <p className="text-gray-700 mb-6">
+                View all uploaded documents, who uploaded them, and their summaries.
+              </p>
+              <UploadHistory patientId={currentPatientId} />
             </div>
           )}
 
           {activeTab === "medications" && currentPatientId && (
             <div>
               <h2 className="text-lg font-semibold text-gray-800 mb-4">
-                Active Medications
+                Medications
               </h2>
-              <p className="text-gray-500">
-                Medications extracted from your documents will appear here.
-              </p>
+              <MedicationsList key={medicationsKey} patientId={currentPatientId} />
             </div>
           )}
 
@@ -300,7 +350,7 @@ export default function DashboardPage() {
 
           {!currentPatientId && activeTab !== "connections" && (
             <div className="text-center py-8">
-              <p className="text-gray-500 mb-4">
+              <p className="text-gray-700 mb-4">
                 Connect with a patient first to view their information.
               </p>
               <button
@@ -314,19 +364,13 @@ export default function DashboardPage() {
         </div>
 
         {/* Add Task Modal */}
-        {showAddTask && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-xl p-6 max-w-md w-full mx-4">
-              <h3 className="text-lg font-semibold mb-4">Add New Task</h3>
-              <p className="text-gray-500 mb-4">Task form coming soon...</p>
-              <button
-                onClick={() => setShowAddTask(false)}
-                className="w-full py-2 bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200"
-              >
-                Close
-              </button>
-            </div>
-          </div>
+        {showAddTask && currentPatientId && (
+          <AddTaskModal
+            patientId={currentPatientId}
+            connections={connections}
+            onClose={() => setShowAddTask(false)}
+            onTaskCreated={() => setTaskListKey((k) => k + 1)}
+          />
         )}
       </main>
     </div>

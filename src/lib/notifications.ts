@@ -122,6 +122,63 @@ export async function notifyFamilyOfTaskCompletion(payload: TaskCompletedPayload
   await Promise.all(notificationPromises);
 }
 
+interface TaskOverduePayload {
+  patientId: string;
+  taskId: string;
+  taskTitle: string;
+  dueDate: Date;
+  dueTime?: string;
+  patientName: string;
+}
+
+export async function notifyFamilyOfTaskOverdue(payload: TaskOverduePayload) {
+  const { patientId, taskId, taskTitle, dueDate, dueTime, patientName } = payload;
+
+  const patient = await prisma.patient.findUnique({
+    where: { id: patientId },
+    include: {
+      familyMembers: true,
+      user: true,
+    },
+  });
+
+  if (!patient) return;
+
+  const dueString = dueTime
+    ? `${dueDate.toLocaleDateString()} at ${dueTime}`
+    : dueDate.toLocaleDateString();
+
+  // Send real-time notification to family channel
+  await pusherServer.trigger(getFamilyChannel(patientId), PUSHER_EVENTS.TASK_UPDATED, {
+    taskId,
+    taskTitle,
+    status: "OVERDUE",
+    patientName,
+  });
+
+  // Notify the patient
+  await sendNotification({
+    userId: patient.userId,
+    taskId,
+    type: "TASK_OVERDUE",
+    title: "Task Overdue",
+    message: `"${taskTitle}" was due ${dueString} and hasn't been completed.`,
+  });
+
+  // Notify family members
+  const notificationPromises = patient.familyMembers.map((member) =>
+    sendNotification({
+      userId: member.id,
+      taskId,
+      type: "TASK_OVERDUE",
+      title: `${patientName} has an overdue task`,
+      message: `"${taskTitle}" was due ${dueString} and hasn't been completed.`,
+    })
+  );
+
+  await Promise.all(notificationPromises);
+}
+
 export async function sendTaskReminder(taskId: string) {
   const task = await prisma.task.findUnique({
     where: { id: taskId },

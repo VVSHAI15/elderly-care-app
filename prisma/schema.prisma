@@ -26,6 +26,8 @@ model User {
   patient       Patient?  @relation("PatientUser")
   familyOf      Patient[] @relation("FamilyMembers")
   notifications Notification[]
+  uploadedDocuments Document[] @relation("UploadedDocuments")
+  assignedTasks Task[] @relation("AssignedTasks")
 }
 
 model Account {
@@ -114,6 +116,10 @@ model Task {
   medicationId String?
   medication   Medication? @relation(fields: [medicationId], references: [id])
 
+  // Task assignment
+  assignedToId String?
+  assignedTo   User?      @relation("AssignedTasks", fields: [assignedToId], references: [id])
+
   notifications Notification[]
 }
 
@@ -150,9 +156,14 @@ model Document {
   fileType      String
   rawText       String? // OCR extracted text
   processedData Json?        // Structured data extracted from OCR
+  summary       String?      // AI-generated plain-English summary
   documentType  DocumentType @default(OTHER)
   uploadedAt    DateTime     @default(now())
   processedAt   DateTime?
+
+  // Who uploaded the document
+  uploadedById  String?
+  uploadedBy    User?        @relation("UploadedDocuments", fields: [uploadedById], references: [id])
 
   medications   Medication[]
 }

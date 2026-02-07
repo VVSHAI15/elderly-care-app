@@ -50,6 +50,12 @@ export interface Task {
   completedAt?: Date;
   medicationId?: string;
   medication?: Medication;
+  assignedToId?: string;
+  assignedTo?: {
+    id: string;
+    name?: string;
+    role: Role;
+  };
   createdAt: Date;
   updatedAt: Date;
 }
@@ -89,9 +95,16 @@ export interface Document {
   fileType: string;
   rawText?: string;
   processedData?: Record<string, unknown>;
+  summary?: string;
   documentType: DocumentType;
   uploadedAt: Date;
   processedAt?: Date;
+  uploadedById?: string;
+  uploadedBy?: {
+    id: string;
+    name?: string;
+    role: Role;
+  };
 }
 
 // Notification types
