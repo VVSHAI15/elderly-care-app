@@ -62,11 +62,11 @@ function ProgressBar({ stage }: { stage: UploadStage }) {
   if (stage === 0) return null;
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       {/* Progress bar */}
-      <div className="w-full bg-gray-200 rounded-full h-2">
+      <div className="w-full bg-gray-200 rounded-full h-3">
         <div
-          className="bg-blue-500 h-2 rounded-full transition-all duration-500 ease-out"
+          className="bg-blue-500 h-3 rounded-full transition-all duration-500 ease-out"
           style={{ width: `${(stage / 3) * 100}%` }}
         />
       </div>
@@ -79,27 +79,27 @@ function ProgressBar({ stage }: { stage: UploadStage }) {
           const isActive = stage === stepNum;
 
           return (
-            <div key={s.label} className="flex flex-col items-center gap-1 flex-1">
+            <div key={s.label} className="flex flex-col items-center gap-1.5 flex-1">
               <div
-                className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium transition-colors ${
+                className={`w-10 h-10 rounded-full flex items-center justify-center text-base font-semibold transition-colors ${
                   isCompleted
                     ? "bg-green-500 text-white"
                     : isActive
                     ? "bg-blue-500 text-white"
-                    : "bg-gray-200 text-gray-500"
+                    : "bg-gray-200 text-gray-600"
                 }`}
               >
                 {isCompleted ? (
-                  <CheckCircle className="w-4 h-4" />
+                  <CheckCircle className="w-5 h-5" />
                 ) : isActive ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <Loader2 className="w-5 h-5 animate-spin" />
                 ) : (
                   stepNum
                 )}
               </div>
               <span
-                className={`text-xs text-center ${
-                  isActive ? "text-blue-700 font-medium" : "text-gray-700"
+                className={`text-sm text-center ${
+                  isActive ? "text-blue-700 font-semibold" : "text-gray-700"
                 }`}
               >
                 {s.label}
@@ -245,38 +245,41 @@ export function DocumentScanner({ patientId, onScanComplete }: DocumentScannerPr
   });
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       {/* Dropzone — only show when no scan result yet */}
       {!scanResult && !confirmed && (
         <div
           {...getRootProps()}
           className={`
-            border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors
+            border-2 border-dashed rounded-2xl p-10 text-center cursor-pointer transition-colors
             ${isDragActive ? "border-blue-500 bg-blue-50" : "border-gray-300 hover:border-gray-400"}
             ${isProcessing ? "opacity-50 cursor-not-allowed" : ""}
           `}
         >
           <input {...getInputProps()} />
-          <div className="flex flex-col items-center gap-2">
+          <div className="flex flex-col items-center gap-3">
             {isProcessing ? (
               <>
-                <Loader2 className="w-10 h-10 text-blue-500 animate-spin" />
-                <p className="text-gray-800 font-medium">Processing document...</p>
-                <p className="text-sm text-blue-600 flex items-center gap-1">
-                  <Sparkles className="w-3 h-3" />
+                <Loader2 className="w-14 h-14 text-blue-500 animate-spin" />
+                <p className="text-lg text-gray-800 font-semibold">Processing document...</p>
+                <p className="text-base text-blue-600 flex items-center gap-1.5">
+                  <Sparkles className="w-4 h-4" />
                   AI is analyzing your document
                 </p>
               </>
             ) : (
               <>
-                <Upload className="w-10 h-10 text-gray-500" />
-                <p className="text-gray-700">
+                <Upload className="w-14 h-14 text-gray-400" />
+                <p className="text-lg text-gray-800 font-medium">
                   {isDragActive
                     ? "Drop the document here"
                     : "Drag & drop prescription, discharge papers, or PDFs"}
                 </p>
-                <p className="text-sm text-gray-600 flex items-center gap-1">
-                  <Sparkles className="w-3 h-3 text-purple-600" />
+                <p className="text-base text-gray-600">
+                  Or tap here to choose a file
+                </p>
+                <p className="text-sm text-gray-500 flex items-center gap-1.5 mt-1">
+                  <Sparkles className="w-4 h-4 text-purple-600" />
                   Powered by GPT-4 Vision
                 </p>
               </>
@@ -290,28 +293,28 @@ export function DocumentScanner({ patientId, onScanComplete }: DocumentScannerPr
 
       {/* Error */}
       {error && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-start gap-3">
-          <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
+        <div className="bg-red-50 border-2 border-red-200 rounded-xl p-5 flex items-start gap-3">
+          <AlertCircle className="w-6 h-6 text-red-500 flex-shrink-0 mt-0.5" />
           <div>
-            <p className="font-medium text-red-800">Processing Error</p>
-            <p className="text-sm text-red-600">{error}</p>
+            <p className="font-semibold text-red-800 text-base">Processing Error</p>
+            <p className="text-base text-red-700">{error}</p>
           </div>
         </div>
       )}
 
       {/* Confirmed success */}
       {confirmed && (
-        <div className="bg-green-50 border border-green-200 rounded-lg p-6 text-center space-y-3">
-          <CheckCircle className="w-12 h-12 text-green-500 mx-auto" />
-          <p className="font-semibold text-green-800 text-lg">Document Saved Successfully</p>
-          <p className="text-sm text-green-600">
+        <div className="bg-green-50 border-2 border-green-200 rounded-2xl p-8 text-center space-y-4">
+          <CheckCircle className="w-16 h-16 text-green-500 mx-auto" />
+          <p className="font-bold text-green-800 text-xl">Document Saved Successfully</p>
+          <p className="text-base text-green-700">
             Medications and tasks have been created. Check your Tasks tab.
           </p>
           <button
             onClick={handleRescan}
-            className="mt-2 px-4 py-2 bg-white border border-green-300 text-green-700 rounded-lg hover:bg-green-50 transition-colors text-sm font-medium flex items-center gap-2 mx-auto"
+            className="mt-2 px-5 py-3 bg-white border-2 border-green-300 text-green-700 rounded-xl hover:bg-green-50 transition-colors text-base font-semibold flex items-center gap-2 mx-auto"
           >
-            <Upload className="w-4 h-4" />
+            <Upload className="w-5 h-5" />
             Scan Another Document
           </button>
         </div>
@@ -319,46 +322,46 @@ export function DocumentScanner({ patientId, onScanComplete }: DocumentScannerPr
 
       {/* Discharge Summary & Review Phase */}
       {scanResult && !confirmed && (
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-5 space-y-5">
+        <div className="bg-blue-50 border-2 border-blue-200 rounded-2xl p-6 space-y-6">
           {/* Summary */}
           <div>
-            <div className="flex items-center gap-2 mb-2">
-              <Sparkles className="w-5 h-5 text-purple-500" />
-              <h3 className="font-semibold text-gray-800 text-lg">Discharge Summary</h3>
+            <div className="flex items-center gap-2 mb-3">
+              <Sparkles className="w-6 h-6 text-purple-500" />
+              <h3 className="font-bold text-gray-900 text-xl">Discharge Summary</h3>
             </div>
             {scanResult.summary && (
-              <p className="text-gray-700 bg-white rounded-md p-3 border border-blue-100 text-sm leading-relaxed">
+              <p className="text-gray-800 bg-white rounded-xl p-4 border border-blue-100 text-base leading-relaxed">
                 {scanResult.summary}
               </p>
             )}
-            <p className="text-xs text-blue-600 mt-2">
+            <p className="text-sm text-blue-700 mt-3 font-medium">
               Please review the information below. You can edit any field before confirming.
             </p>
           </div>
 
           {/* Editable Pharmacy and Prescriber */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="text-xs font-medium text-gray-700 flex items-center gap-1 mb-1">
-                <Building2 className="w-3 h-3" /> Pharmacy
+              <label className="text-base font-semibold text-gray-800 flex items-center gap-1.5 mb-2">
+                <Building2 className="w-5 h-5" /> Pharmacy
               </label>
               <input
                 type="text"
                 value={editPharmacy}
                 onChange={(e) => setEditPharmacy(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl text-base focus:outline-none focus:ring-2 focus:ring-blue-500"
                 placeholder="Pharmacy name"
               />
             </div>
             <div>
-              <label className="text-xs font-medium text-gray-700 flex items-center gap-1 mb-1">
-                <User className="w-3 h-3" /> Prescriber
+              <label className="text-base font-semibold text-gray-800 flex items-center gap-1.5 mb-2">
+                <User className="w-5 h-5" /> Prescriber
               </label>
               <input
                 type="text"
                 value={editPrescriber}
                 onChange={(e) => setEditPrescriber(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl text-base focus:outline-none focus:ring-2 focus:ring-blue-500"
                 placeholder="Doctor name"
               />
             </div>
@@ -367,66 +370,66 @@ export function DocumentScanner({ patientId, onScanComplete }: DocumentScannerPr
           {/* Editable Medications */}
           {editMedications.length > 0 && (
             <div>
-              <p className="font-medium text-gray-700 mb-2 flex items-center gap-1">
-                <Pencil className="w-4 h-4 text-blue-500" />
+              <p className="font-semibold text-gray-800 mb-3 flex items-center gap-2 text-base">
+                <Pencil className="w-5 h-5 text-blue-500" />
                 Extracted Medications ({editMedications.length}):
               </p>
-              <div className="space-y-3">
+              <div className="space-y-4">
                 {editMedications.map((med, index) => (
                   <div
                     key={index}
-                    className="bg-white rounded-md p-4 border border-blue-100 space-y-2"
+                    className="bg-white rounded-xl p-5 border-2 border-blue-100 space-y-3"
                   >
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
-                        <FileText className="w-4 h-4 text-blue-600" />
-                        <span className="text-xs text-gray-700 font-medium">
+                        <FileText className="w-5 h-5 text-blue-600" />
+                        <span className="text-sm text-gray-800 font-semibold">
                           Medication {index + 1}
                         </span>
                       </div>
                       <button
                         onClick={() => removeMedication(index)}
-                        className="text-red-400 hover:text-red-600 transition-colors"
-                        title="Remove medication"
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors text-sm font-medium"
                       >
-                        <Trash2 className="w-4 h-4" />
+                        <Trash2 className="w-5 h-5" />
+                        Remove
                       </button>
                     </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div>
-                        <label className="text-xs text-gray-700">Name</label>
+                        <label className="text-sm font-semibold text-gray-800 mb-1 block">Name</label>
                         <input
                           type="text"
                           value={med.name}
                           onChange={(e) => updateMedication(index, "name", e.target.value)}
-                          className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          className="w-full px-3 py-2.5 border-2 border-gray-300 rounded-lg text-base focus:outline-none focus:ring-2 focus:ring-blue-500"
                         />
                       </div>
                       <div>
-                        <label className="text-xs text-gray-700">Dosage</label>
+                        <label className="text-sm font-semibold text-gray-800 mb-1 block">Dosage</label>
                         <input
                           type="text"
                           value={med.dosage}
                           onChange={(e) => updateMedication(index, "dosage", e.target.value)}
-                          className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          className="w-full px-3 py-2.5 border-2 border-gray-300 rounded-lg text-base focus:outline-none focus:ring-2 focus:ring-blue-500"
                         />
                       </div>
                       <div>
-                        <label className="text-xs text-gray-700">Frequency</label>
+                        <label className="text-sm font-semibold text-gray-800 mb-1 block">Frequency</label>
                         <input
                           type="text"
                           value={med.frequency}
                           onChange={(e) => updateMedication(index, "frequency", e.target.value)}
-                          className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          className="w-full px-3 py-2.5 border-2 border-gray-300 rounded-lg text-base focus:outline-none focus:ring-2 focus:ring-blue-500"
                         />
                       </div>
                       <div>
-                        <label className="text-xs text-gray-700">Instructions</label>
+                        <label className="text-sm font-semibold text-gray-800 mb-1 block">Instructions</label>
                         <input
                           type="text"
                           value={med.instructions || ""}
                           onChange={(e) => updateMedication(index, "instructions", e.target.value)}
-                          className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          className="w-full px-3 py-2.5 border-2 border-gray-300 rounded-lg text-base focus:outline-none focus:ring-2 focus:ring-blue-500"
                           placeholder="Optional"
                         />
                       </div>
@@ -438,7 +441,7 @@ export function DocumentScanner({ patientId, onScanComplete }: DocumentScannerPr
           )}
 
           {editMedications.length === 0 && (
-            <p className="text-sm text-amber-600">
+            <p className="text-base text-amber-700 font-medium">
               No medications were detected. The image may be unclear or not contain prescription information.
             </p>
           )}
@@ -446,10 +449,10 @@ export function DocumentScanner({ patientId, onScanComplete }: DocumentScannerPr
           {/* Raw text toggle */}
           {scanResult.rawText && (
             <details>
-              <summary className="text-sm text-gray-700 cursor-pointer hover:text-gray-900">
+              <summary className="text-base text-gray-800 cursor-pointer hover:text-gray-900 font-medium">
                 Show what AI read from the document
               </summary>
-              <pre className="mt-2 p-3 bg-gray-100 rounded text-xs text-gray-700 whitespace-pre-wrap max-h-48 overflow-y-auto">
+              <pre className="mt-2 p-4 bg-gray-100 rounded-xl text-sm text-gray-700 whitespace-pre-wrap max-h-48 overflow-y-auto">
                 {scanResult.rawText}
               </pre>
             </details>
@@ -457,13 +460,13 @@ export function DocumentScanner({ patientId, onScanComplete }: DocumentScannerPr
 
           {/* Document type selection */}
           <div>
-            <label className="text-xs font-medium text-gray-700 mb-1 block">
+            <label className="text-base font-semibold text-gray-800 mb-2 block">
               Document Type
             </label>
             <select
               value={documentType}
               onChange={(e) => setDocumentType(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+              className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl text-base focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
             >
               <option value="PRESCRIPTION">Prescription</option>
               <option value="DISCHARGE_SUMMARY">Discharge Summary</option>
@@ -474,25 +477,25 @@ export function DocumentScanner({ patientId, onScanComplete }: DocumentScannerPr
           </div>
 
           {/* Action buttons */}
-          <div className="flex gap-3 pt-2">
+          <div className="flex gap-4 pt-2">
             <button
               onClick={handleConfirm}
               disabled={isConfirming}
-              className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+              className="flex-1 flex items-center justify-center gap-2 px-5 py-3.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors font-semibold text-base disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isConfirming ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
+                <Loader2 className="w-5 h-5 animate-spin" />
               ) : (
-                <Save className="w-4 h-4" />
+                <Save className="w-5 h-5" />
               )}
               {isConfirming ? "Saving..." : "Confirm & Save"}
             </button>
             <button
               onClick={handleRescan}
               disabled={isConfirming}
-              className="flex items-center gap-2 px-4 py-2.5 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium disabled:opacity-50"
+              className="flex items-center gap-2 px-5 py-3.5 bg-white border-2 border-gray-300 text-gray-800 rounded-xl hover:bg-gray-50 transition-colors font-semibold text-base disabled:opacity-50"
             >
-              <RotateCcw className="w-4 h-4" />
+              <RotateCcw className="w-5 h-5" />
               Re-scan
             </button>
           </div>

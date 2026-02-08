@@ -81,18 +81,18 @@ export function MedicationsList({ patientId }: MedicationsListProps) {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center py-8">
-        <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="w-10 h-10 text-blue-500 animate-spin" />
       </div>
     );
   }
 
   if (medications.length === 0) {
     return (
-      <div className="text-center py-12">
-        <Inbox className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-        <p className="text-gray-700 font-medium">No medications yet</p>
-        <p className="text-sm text-gray-600 mt-1">
+      <div className="text-center py-16">
+        <Inbox className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+        <p className="text-lg text-gray-800 font-semibold">No medications yet</p>
+        <p className="text-base text-gray-600 mt-2">
           Scan a prescription document to extract medications automatically.
         </p>
       </div>
@@ -103,9 +103,9 @@ export function MedicationsList({ patientId }: MedicationsListProps) {
   const inactiveMeds = medications.filter((m) => !m.isActive);
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       {activeMeds.length > 0 && (
-        <div className="space-y-3">
+        <div className="space-y-4">
           {activeMeds.map((med) => (
             <MedicationCard key={med.id} medication={med} onToggle={toggleActive} />
           ))}
@@ -114,10 +114,10 @@ export function MedicationsList({ patientId }: MedicationsListProps) {
 
       {inactiveMeds.length > 0 && (
         <div>
-          <p className="text-sm font-medium text-gray-600 mb-2 mt-6">
+          <p className="text-base font-semibold text-gray-700 mb-3 mt-8">
             Inactive ({inactiveMeds.length})
           </p>
-          <div className="space-y-3">
+          <div className="space-y-4">
             {inactiveMeds.map((med) => (
               <MedicationCard key={med.id} medication={med} onToggle={toggleActive} />
             ))}
@@ -137,56 +137,56 @@ function MedicationCard({
 }) {
   return (
     <div
-      className={`bg-white rounded-lg border p-4 transition-all hover:shadow-md ${
+      className={`bg-white rounded-xl border-2 p-5 transition-all hover:shadow-md ${
         medication.isActive ? "border-gray-200" : "border-gray-100 opacity-60"
       }`}
     >
-      <div className="flex items-start gap-3">
+      <div className="flex items-start gap-4">
         <div
-          className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${
+          className={`w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 ${
             medication.isActive ? "bg-blue-50" : "bg-gray-100"
           }`}
         >
-          <Pill className={`w-5 h-5 ${medication.isActive ? "text-blue-500" : "text-gray-400"}`} />
+          <Pill className={`w-6 h-6 ${medication.isActive ? "text-blue-500" : "text-gray-400"}`} />
         </div>
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-1">
-            <h3 className="font-semibold text-gray-800">{medication.name}</h3>
+          <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+            <h3 className="text-lg font-bold text-gray-900">{medication.name}</h3>
             <span
-              className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+              className={`px-3 py-1 rounded-full text-sm font-semibold ${
                 medication.isActive
-                  ? "bg-green-100 text-green-700"
-                  : "bg-gray-100 text-gray-600"
+                  ? "bg-green-100 text-green-800"
+                  : "bg-gray-100 text-gray-700"
               }`}
             >
               {medication.isActive ? "Active" : "Inactive"}
             </span>
           </div>
 
-          <p className="text-sm text-gray-700 mb-2">
-            <span className="font-medium">{medication.dosage}</span> &middot;{" "}
+          <p className="text-base text-gray-800 mb-2">
+            <span className="font-semibold">{medication.dosage}</span> &middot;{" "}
             {medication.frequency}
           </p>
 
           {medication.instructions && (
-            <p className="text-sm text-gray-600 mb-2">{medication.instructions}</p>
+            <p className="text-base text-gray-700 mb-3">{medication.instructions}</p>
           )}
 
-          <div className="flex flex-wrap items-center gap-3 text-xs text-gray-600">
+          <div className="flex flex-wrap items-center gap-4 text-sm text-gray-700">
             {medication.prescriber && (
-              <span className="flex items-center gap-1">
-                <User className="w-3 h-3" />
+              <span className="flex items-center gap-1.5">
+                <User className="w-5 h-5" />
                 Dr. {medication.prescriber}
               </span>
             )}
             {medication.pharmacy && (
-              <span className="flex items-center gap-1">
-                <Building2 className="w-3 h-3" />
+              <span className="flex items-center gap-1.5">
+                <Building2 className="w-5 h-5" />
                 {medication.pharmacy}
               </span>
             )}
-            <span className="flex items-center gap-1">
-              <Calendar className="w-3 h-3" />
+            <span className="flex items-center gap-1.5">
+              <Calendar className="w-5 h-5" />
               Since {format(new Date(medication.startDate), "MMM d, yyyy")}
             </span>
           </div>
@@ -194,17 +194,22 @@ function MedicationCard({
 
         <button
           onClick={() => onToggle(medication)}
-          className={`flex-shrink-0 p-1.5 rounded-full transition-colors ${
+          className={`flex-shrink-0 flex items-center gap-2 px-3 py-2 rounded-xl transition-colors font-medium text-sm ${
             medication.isActive
-              ? "text-red-400 hover:text-red-600 hover:bg-red-50"
-              : "text-green-500 hover:text-green-700 hover:bg-green-50"
+              ? "text-red-600 hover:text-red-700 hover:bg-red-50"
+              : "text-green-600 hover:text-green-700 hover:bg-green-50"
           }`}
-          title={medication.isActive ? "Mark as inactive" : "Reactivate"}
         >
           {medication.isActive ? (
-            <XCircle className="w-5 h-5" />
+            <>
+              <XCircle className="w-5 h-5" />
+              <span className="hidden sm:inline">Stop</span>
+            </>
           ) : (
-            <CheckCircle className="w-5 h-5" />
+            <>
+              <CheckCircle className="w-5 h-5" />
+              <span className="hidden sm:inline">Restart</span>
+            </>
           )}
         </button>
       </div>

@@ -41,27 +41,27 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white flex flex-col">
       <header className="container mx-auto px-4 py-6">
-        <Link href="/" className="flex items-center gap-2 w-fit">
-          <Heart className="w-8 h-8 text-blue-600" />
-          <span className="text-2xl font-bold text-gray-800">CareCheck</span>
+        <Link href="/" className="flex items-center gap-3 w-fit">
+          <Heart className="w-9 h-9 text-blue-600" />
+          <span className="text-2xl font-bold text-gray-900">CareCheck</span>
         </Link>
       </header>
 
       <main className="flex-1 flex items-center justify-center px-4">
         <div className="w-full max-w-md">
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-8">
-            <h1 className="text-2xl font-bold text-gray-800 mb-2">Welcome back</h1>
-            <p className="text-gray-600 mb-6">Sign in to your account</p>
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-10">
+            <h1 className="text-3xl font-bold text-gray-900 mb-2">Welcome back</h1>
+            <p className="text-lg text-gray-700 mb-8">Sign in to your account</p>
 
-            <form onSubmit={handleSubmit} className="space-y-4">
+            <form onSubmit={handleSubmit} className="space-y-5">
               {error && (
-                <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-lg text-sm">
+                <div className="bg-red-50 border-2 border-red-200 text-red-700 px-4 py-4 rounded-xl text-base font-medium">
                   {error}
                 </div>
               )}
 
               <div>
-                <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
+                <label htmlFor="email" className="block text-base font-semibold text-gray-800 mb-2">
                   Email
                 </label>
                 <input
@@ -69,14 +69,14 @@ export default function LoginPage() {
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-shadow"
+                  className="w-full px-4 py-3.5 border-2 border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-shadow text-base"
                   placeholder="you@example.com"
                   required
                 />
               </div>
 
               <div>
-                <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">
+                <label htmlFor="password" className="block text-base font-semibold text-gray-800 mb-2">
                   Password
                 </label>
                 <input
@@ -84,7 +84,7 @@ export default function LoginPage() {
                   type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-shadow"
+                  className="w-full px-4 py-3.5 border-2 border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-shadow text-base"
                   placeholder="Enter your password"
                   required
                 />
@@ -93,11 +93,11 @@ export default function LoginPage() {
               <button
                 type="submit"
                 disabled={isLoading}
-                className="w-full py-3 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                className="w-full py-4 bg-blue-600 text-white font-semibold text-lg rounded-xl hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
               >
                 {isLoading ? (
                   <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <Loader2 className="w-5 h-5 animate-spin" />
                     Signing in...
                   </>
                 ) : (
@@ -106,9 +106,9 @@ export default function LoginPage() {
               </button>
             </form>
 
-            <p className="mt-6 text-center text-gray-600">
+            <p className="mt-8 text-center text-lg text-gray-700">
               Don&apos;t have an account?{" "}
-              <Link href="/register" className="text-blue-600 hover:text-blue-700 font-medium">
+              <Link href="/register" className="text-blue-700 hover:text-blue-800 font-semibold underline">
                 Sign up
               </Link>
             </p>

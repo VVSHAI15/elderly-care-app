@@ -16,7 +16,11 @@ export async function GET(request: NextRequest) {
   const tasks = await prisma.task.findMany({
     where: {
       patientId,
-      ...(status && { status: status as never }),
+      ...(status && {
+        status: status === "PENDING"
+          ? { in: ["PENDING", "OVERDUE"] as never }
+          : (status as never),
+      }),
       ...(category && { category: category as never }),
     },
     include: {

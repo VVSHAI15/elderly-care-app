@@ -57,28 +57,28 @@ export function ConnectToPatient({
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       {/* Enter Code Section */}
-      <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-        <h3 className="font-medium text-green-900 mb-2 flex items-center gap-2">
-          <UserPlus className="w-4 h-4" />
+      <div className="bg-green-50 border-2 border-green-200 rounded-2xl p-6">
+        <h3 className="text-lg font-bold text-green-900 mb-2 flex items-center gap-2">
+          <UserPlus className="w-5 h-5" />
           Connect to a Patient
         </h3>
-        <p className="text-sm text-green-700 mb-4">
+        <p className="text-base text-green-800 mb-5">
           Enter the invite code from the patient you want to help care for.
         </p>
 
-        <form onSubmit={handleSubmit} className="space-y-3">
+        <form onSubmit={handleSubmit} className="space-y-4">
           {error && (
-            <div className="flex items-center gap-2 text-red-600 text-sm bg-red-50 p-2 rounded">
-              <AlertCircle className="w-4 h-4" />
+            <div className="flex items-center gap-2 text-red-700 text-base bg-red-50 p-4 rounded-xl font-medium">
+              <AlertCircle className="w-5 h-5" />
               {error}
             </div>
           )}
 
           {success && (
-            <div className="flex items-center gap-2 text-green-600 text-sm bg-green-100 p-2 rounded">
-              <CheckCircle className="w-4 h-4" />
+            <div className="flex items-center gap-2 text-green-700 text-base bg-green-100 p-4 rounded-xl font-medium">
+              <CheckCircle className="w-5 h-5" />
               {success}
             </div>
           )}
@@ -89,17 +89,17 @@ export function ConnectToPatient({
             onChange={(e) => setCode(e.target.value.toUpperCase())}
             placeholder="Enter 6-digit code"
             maxLength={6}
-            className="w-full px-4 py-3 border border-green-300 rounded-lg font-mono text-xl text-center tracking-wider uppercase focus:ring-2 focus:ring-green-500 focus:border-transparent outline-none"
+            className="w-full px-4 py-4 border-2 border-green-300 rounded-xl font-mono text-2xl text-center tracking-wider uppercase focus:ring-2 focus:ring-green-500 focus:border-transparent outline-none"
           />
 
           <button
             type="submit"
             disabled={loading || code.length < 6}
-            className="w-full py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            className="w-full py-4 bg-green-600 text-white rounded-xl hover:bg-green-700 transition-colors font-semibold text-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
           >
             {loading ? (
               <>
-                <Loader2 className="w-4 h-4 animate-spin" />
+                <Loader2 className="w-5 h-5 animate-spin" />
                 Connecting...
               </>
             ) : (
@@ -112,23 +112,23 @@ export function ConnectToPatient({
       {/* Connected Patients */}
       {connectedPatients.length > 0 && (
         <div>
-          <h3 className="font-medium text-gray-900 mb-3">
+          <h3 className="text-lg font-bold text-gray-900 mb-4">
             Your Patients ({connectedPatients.length})
           </h3>
-          <div className="space-y-2">
+          <div className="space-y-3">
             {connectedPatients.map((patient) => (
               <button
                 key={patient.patientId}
                 onClick={() => onSelectPatient(patient.patientId)}
-                className="w-full flex items-center justify-between p-4 bg-white border border-gray-200 rounded-lg hover:border-blue-500 hover:bg-blue-50 transition-colors text-left"
+                className="w-full flex items-center justify-between p-5 bg-white border-2 border-gray-200 rounded-xl hover:border-blue-500 hover:bg-blue-50 transition-colors text-left"
               >
                 <div>
-                  <p className="font-medium text-gray-800">
+                  <p className="text-lg font-semibold text-gray-900">
                     {patient.name || "Unknown Patient"}
                   </p>
-                  <p className="text-sm text-gray-500">{patient.email}</p>
+                  <p className="text-base text-gray-600">{patient.email}</p>
                 </div>
-                <span className="text-blue-600 text-sm">View →</span>
+                <span className="text-blue-700 text-base font-semibold">View →</span>
               </button>
             ))}
           </div>

@@ -23,7 +23,12 @@ Return a JSON object with:
 5. "patient": patient name if visible (optional)
 6. "rawText": key text you can read from the document
 
-If you cannot read the document clearly or no medications are found, still return the structure with empty medications array and a summary noting the issue.
+7. "medicalTerms": an array of medical terms, abbreviations, or jargon found in the document that a non-medical person might not understand. For each item provide:
+   - term: the medical word or abbreviation exactly as it appears in the document (e.g., "Hypertension", "BID", "eGFR", "Metformin")
+   - explanation: a plain-language explanation in 1-2 short sentences that an elderly patient or their non-medical family member could easily understand. Do not use other medical jargon in the explanation. Write as if explaining to a grandparent.
+   Include: diagnosis names, medication names, medical abbreviations (BID, PRN, q.d., PO, etc.), procedure names, lab test names and values, and any other specialized terms. Aim for 5-15 terms depending on document complexity. If the document is very simple with no jargon, return an empty array.
+
+If you cannot read the document clearly or no medications are found, still return the structure with empty medications array, empty medicalTerms array, and a summary noting the issue.
 
 Return ONLY valid JSON, no other text.`;
 
@@ -33,7 +38,7 @@ function parseGptResponse(content: string) {
     return JSON.parse(cleanContent);
   } catch {
     console.error("Failed to parse GPT response:", content);
-    return { medications: [], rawText: content, summary: "Unable to parse document." };
+    return { medications: [], medicalTerms: [], rawText: content, summary: "Unable to parse document." };
   }
 }
 
@@ -59,7 +64,7 @@ async function analyzeImage(buffer: Buffer, fileType: string) {
         ],
       },
     ],
-    max_tokens: 2000,
+    max_tokens: 2500,
   });
 
   return completion.choices[0]?.message?.content || "{}";
@@ -75,7 +80,7 @@ async function analyzePdfText(text: string) {
         content: `Please analyze the following medical document text and extract all medication information:\n\n${text}`,
       },
     ],
-    max_tokens: 2000,
+    max_tokens: 2500,
   });
 
   return completion.choices[0]?.message?.content || "{}";
@@ -139,6 +144,7 @@ export async function POST(request: NextRequest) {
       prescriber: parsedResult.prescriber,
       summary: parsedResult.summary || "",
       rawText: parsedResult.rawText,
+      medicalTerms: parsedResult.medicalTerms || [],
     });
   } catch (error) {
     console.error("Error processing document:", error);

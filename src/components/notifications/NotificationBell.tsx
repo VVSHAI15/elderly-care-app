@@ -102,11 +102,11 @@ export function NotificationBell({ userId }: NotificationBellProps) {
     <div className="relative">
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="relative p-2 rounded-full hover:bg-gray-100 transition-colors"
+        className="relative p-3 rounded-xl hover:bg-gray-100 transition-colors"
       >
-        <Bell className="w-6 h-6 text-gray-600" />
+        <Bell className="w-7 h-7 text-gray-700" />
         {unreadCount > 0 && (
-          <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
+          <span className="absolute -top-0.5 -right-0.5 bg-red-500 text-white text-sm font-bold rounded-full w-6 h-6 flex items-center justify-center">
             {unreadCount > 9 ? "9+" : unreadCount}
           </span>
         )}
@@ -118,22 +118,22 @@ export function NotificationBell({ userId }: NotificationBellProps) {
             className="fixed inset-0 z-40"
             onClick={() => setIsOpen(false)}
           />
-          <div className="absolute right-0 mt-2 w-80 bg-white rounded-lg shadow-lg border z-50 max-h-96 overflow-hidden">
-            <div className="p-3 border-b flex items-center justify-between">
-              <h3 className="font-semibold text-gray-800">Notifications</h3>
+          <div className="absolute right-0 mt-2 w-[calc(100vw-2rem)] sm:w-96 bg-white rounded-2xl shadow-lg border-2 z-50 max-h-96 overflow-hidden">
+            <div className="p-4 border-b flex items-center justify-between">
+              <h3 className="text-lg font-bold text-gray-900">Notifications</h3>
               {unreadCount > 0 && (
                 <button
                   onClick={markAllAsRead}
-                  className="text-sm text-blue-500 hover:text-blue-600"
+                  className="text-base text-blue-600 hover:text-blue-700 font-medium"
                 >
                   Mark all read
                 </button>
               )}
             </div>
 
-            <div className="overflow-y-auto max-h-72">
+            <div className="overflow-y-auto max-h-80">
               {notifications.length === 0 ? (
-                <div className="p-4 text-center text-gray-500">
+                <div className="p-6 text-center text-base text-gray-600">
                   No notifications
                 </div>
               ) : (
@@ -141,22 +141,22 @@ export function NotificationBell({ userId }: NotificationBellProps) {
                   <div
                     key={notification.id}
                     onClick={() => !notification.isRead && markAsRead(notification.id)}
-                    className={`p-3 border-b cursor-pointer hover:bg-gray-50 transition-colors ${
+                    className={`p-4 border-b cursor-pointer hover:bg-gray-50 transition-colors ${
                       !notification.isRead ? "bg-blue-50" : ""
                     }`}
                   >
-                    <div className="flex items-start gap-2">
+                    <div className="flex items-start gap-3">
                       {!notification.isRead && (
-                        <span className="w-2 h-2 bg-blue-500 rounded-full flex-shrink-0 mt-2" />
+                        <span className="w-3 h-3 bg-blue-500 rounded-full flex-shrink-0 mt-2" />
                       )}
                       <div className="flex-1 min-w-0">
-                        <p className="font-medium text-gray-800 text-sm">
+                        <p className="font-semibold text-gray-900 text-base">
                           {notification.title}
                         </p>
-                        <p className="text-gray-600 text-sm truncate">
+                        <p className="text-gray-700 text-base mt-0.5">
                           {notification.message}
                         </p>
-                        <p className="text-gray-400 text-xs mt-1">
+                        <p className="text-gray-500 text-sm mt-1.5">
                           {format(new Date(notification.sentAt), "MMM d, h:mm a")}
                         </p>
                       </div>
