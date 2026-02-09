@@ -14,6 +14,7 @@ export async function POST(request: NextRequest) {
     rawText,
     uploadedById,
     documentType = "PRESCRIPTION",
+    medicalTerms = [],
   } = body;
 
   if (!patientId || !fileName) {
@@ -33,7 +34,7 @@ export async function POST(request: NextRequest) {
         fileType: fileType || "image/unknown",
         rawText: rawText || "",
         summary: summary || "",
-        processedData: { medications, pharmacy, prescriber } as never,
+        processedData: { medications, pharmacy, prescriber, medicalTerms } as never,
         documentType: documentType as never,
         uploadedById: uploadedById || null,
         processedAt: new Date(),

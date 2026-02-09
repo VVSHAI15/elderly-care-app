@@ -8,6 +8,7 @@ import {
   User,
   Loader2,
   Inbox,
+  BookOpen,
 } from "lucide-react";
 
 interface UploadedDocument {
@@ -16,6 +17,12 @@ interface UploadedDocument {
   documentType: string;
   summary: string | null;
   uploadedAt: string;
+  processedData: {
+    medications?: unknown[];
+    pharmacy?: string;
+    prescriber?: string;
+    medicalTerms?: { term: string; explanation: string }[];
+  } | null;
   uploadedBy: {
     id: string;
     name: string | null;
@@ -135,6 +142,24 @@ export function UploadHistory({ patientId }: UploadHistoryProps) {
                 <p className="text-base text-gray-700 mb-3 leading-relaxed">
                   {doc.summary}
                 </p>
+              )}
+
+              {/* Medical Terms Explained */}
+              {doc.processedData?.medicalTerms && doc.processedData.medicalTerms.length > 0 && (
+                <details className="mb-3">
+                  <summary className="text-base text-teal-700 cursor-pointer hover:text-teal-800 font-medium flex items-center gap-1.5">
+                    <BookOpen className="w-4 h-4" />
+                    Medical Terms Explained ({doc.processedData.medicalTerms.length})
+                  </summary>
+                  <div className="mt-2 bg-teal-50 rounded-xl border border-teal-200 divide-y divide-teal-100">
+                    {doc.processedData.medicalTerms.map((item, idx) => (
+                      <div key={idx} className="px-4 py-3">
+                        <span className="font-bold text-teal-900 text-base">{item.term}</span>
+                        <span className="text-gray-800 text-base"> &mdash; {item.explanation}</span>
+                      </div>
+                    ))}
+                  </div>
+                </details>
               )}
 
               {/* Medications count */}

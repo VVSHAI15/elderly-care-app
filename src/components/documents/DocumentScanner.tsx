@@ -16,6 +16,7 @@ import {
   RotateCcw,
   Save,
   Trash2,
+  BookOpen,
 } from "lucide-react";
 
 interface ExtractedMedication {
@@ -35,6 +36,7 @@ interface ScanResult {
   prescriber?: string;
   summary?: string;
   rawText?: string;
+  medicalTerms?: { term: string; explanation: string }[];
 }
 
 interface ConfirmedResult {
@@ -197,6 +199,7 @@ export function DocumentScanner({ patientId, onScanComplete }: DocumentScannerPr
           rawText: scanResult.rawText,
           uploadedById: session?.user?.id || null,
           documentType,
+          medicalTerms: scanResult.medicalTerms || [],
         }),
       });
 
@@ -338,6 +341,30 @@ export function DocumentScanner({ patientId, onScanComplete }: DocumentScannerPr
               Please review the information below. You can edit any field before confirming.
             </p>
           </div>
+
+          {/* Medical Terms Explained */}
+          {scanResult.medicalTerms && scanResult.medicalTerms.length > 0 && (
+            <div>
+              <div className="flex items-center gap-2 mb-3">
+                <BookOpen className="w-5 h-5 text-teal-600" />
+                <h4 className="font-bold text-gray-900 text-base">
+                  Medical Terms Explained ({scanResult.medicalTerms.length})
+                </h4>
+              </div>
+              <div className="bg-teal-50 rounded-xl border-2 border-teal-200 divide-y divide-teal-100">
+                {scanResult.medicalTerms.map((item, idx) => (
+                  <div key={idx} className="px-4 py-3">
+                    <span className="font-bold text-teal-900 text-base">
+                      {item.term}
+                    </span>
+                    <span className="text-gray-800 text-base">
+                      {" "}&mdash; {item.explanation}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Editable Pharmacy and Prescriber */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
