@@ -39,17 +39,20 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white flex flex-col">
+    <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,_#dbe8f8_0%,_#eef4fb_45%,_#f6f9fe_100%)] flex flex-col">
       <header className="container mx-auto px-4 py-6">
         <Link href="/" className="flex items-center gap-3 w-fit">
-          <Heart className="w-9 h-9 text-blue-600" />
-          <span className="text-2xl font-bold text-gray-900">CareCheck</span>
+          <Heart className="w-9 h-9 text-[#2f5f9f]" />
+          <span className="text-2xl font-bold text-gray-900">guardian.ai</span>
         </Link>
       </header>
 
       <main className="flex-1 flex items-center justify-center px-4">
         <div className="w-full max-w-md">
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-10">
+          <div className="bg-white/95 rounded-2xl shadow-[0_22px_48px_rgba(20,44,86,0.14)] border border-[#d8e2f1] p-10">
+            <span className="inline-flex rounded-full border border-[#d8e2f1] bg-[#f2f6fd] px-3 py-1 text-xs font-semibold uppercase tracking-wide text-[#2f5f9f] mb-5">
+              Secure Access
+            </span>
             <h1 className="text-3xl font-bold text-gray-900 mb-2">Welcome back</h1>
             <p className="text-lg text-gray-700 mb-8">Sign in to your account</p>
 
@@ -69,7 +72,7 @@ export default function LoginPage() {
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="w-full px-4 py-3.5 border-2 border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-shadow text-base"
+                  className="w-full px-4 py-3.5 border-2 border-[#cdd9e9] rounded-xl bg-[#fcfdff] focus:ring-2 focus:ring-[#2f5f9f] focus:border-[#2f5f9f] outline-none transition-shadow text-base"
                   placeholder="you@example.com"
                   required
                 />
@@ -84,7 +87,7 @@ export default function LoginPage() {
                   type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full px-4 py-3.5 border-2 border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-shadow text-base"
+                  className="w-full px-4 py-3.5 border-2 border-[#cdd9e9] rounded-xl bg-[#fcfdff] focus:ring-2 focus:ring-[#2f5f9f] focus:border-[#2f5f9f] outline-none transition-shadow text-base"
                   placeholder="Enter your password"
                   required
                 />
@@ -93,7 +96,7 @@ export default function LoginPage() {
               <button
                 type="submit"
                 disabled={isLoading}
-                className="w-full py-4 bg-blue-600 text-white font-semibold text-lg rounded-xl hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                className="w-full py-4 bg-[#2f5f9f] text-white font-semibold text-lg rounded-xl hover:bg-[#224978] transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-[0_12px_24px_rgba(47,95,159,0.28)]"
               >
                 {isLoading ? (
                   <>
@@ -108,7 +111,7 @@ export default function LoginPage() {
 
             <p className="mt-8 text-center text-lg text-gray-700">
               Don&apos;t have an account?{" "}
-              <Link href="/register" className="text-blue-700 hover:text-blue-800 font-semibold underline">
+              <Link href="/register" className="text-[#2f5f9f] hover:text-[#224978] font-semibold underline">
                 Sign up
               </Link>
             </p>

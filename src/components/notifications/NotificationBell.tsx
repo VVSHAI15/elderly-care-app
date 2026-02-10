@@ -24,8 +24,19 @@ export function NotificationBell({ userId }: NotificationBellProps) {
   const [unreadCount, setUnreadCount] = useState(0);
 
   useEffect(() => {
+    let cancelled = false;
+
     // Fetch initial notifications
-    fetchNotifications();
+    fetch(`/api/notifications?userId=${userId}`)
+      .then((response) => response.json())
+      .then((data: Notification[]) => {
+        if (cancelled) return;
+        setNotifications(data);
+        setUnreadCount(data.filter((n) => !n.isRead).length);
+      })
+      .catch((error) => {
+        console.error("Failed to fetch notifications:", error);
+      });
 
     // Subscribe to real-time notifications
     const pusher = getPusherClient();
@@ -46,22 +57,16 @@ export function NotificationBell({ userId }: NotificationBellProps) {
       });
 
       return () => {
+        cancelled = true;
         channel.unbind_all();
         channel.unsubscribe();
       };
     }
-  }, [userId]);
 
-  const fetchNotifications = async () => {
-    try {
-      const response = await fetch(`/api/notifications?userId=${userId}`);
-      const data = await response.json();
-      setNotifications(data);
-      setUnreadCount(data.filter((n: Notification) => !n.isRead).length);
-    } catch (error) {
-      console.error("Failed to fetch notifications:", error);
-    }
-  };
+    return () => {
+      cancelled = true;
+    };
+  }, [userId]);
 
   const markAsRead = async (id: string) => {
     try {

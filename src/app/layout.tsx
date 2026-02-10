@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "CareCheck - Elderly Care Coordination",
+  title: "guardian.ai - Elderly Care Coordination",
   description: "Coordinate elderly care with smart medication tracking and task management",
 };
 

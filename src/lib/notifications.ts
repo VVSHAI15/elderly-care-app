@@ -59,7 +59,7 @@ export async function sendNotification(payload: NotificationPayload) {
   if (notification.user.email && emailClient) {
     try {
       await emailClient.emails.send({
-        from: "CareCheck <notifications@carecheck.app>",
+        from: "guardian.ai <notifications@carecheck.app>",
         to: notification.user.email,
         subject: title,
         html: `
@@ -68,7 +68,7 @@ export async function sendNotification(payload: NotificationPayload) {
             <p style="color: #374151; font-size: 16px;">${message}</p>
             <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 20px 0;" />
             <p style="color: #6b7280; font-size: 14px;">
-              This notification was sent from CareCheck.
+              This notification was sent from guardian.ai.
               <a href="${process.env.NEXT_PUBLIC_APP_URL}/dashboard">View Dashboard</a>
             </p>
           </div>

@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { Heart, Plus, Upload, Settings, LogOut, Loader2, Users, History, Pill } from "lucide-react";
+import { Heart, Plus, Upload, LogOut, Loader2, Users, History, Pill } from "lucide-react";
 import { signOut } from "next-auth/react";
 import { DocumentScanner } from "@/components/documents/DocumentScanner";
 import { TaskList } from "@/components/tasks/TaskList";
@@ -134,8 +134,8 @@ export default function DashboardPage() {
 
   if (status === "loading" || loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <Loader2 className="w-10 h-10 text-blue-600 animate-spin" />
+      <div className="min-h-screen bg-[#edf2fa] flex items-center justify-center">
+        <Loader2 className="w-10 h-10 text-[#2f5f9f] animate-spin" />
       </div>
     );
   }
@@ -150,26 +150,26 @@ export default function DashboardPage() {
   const currentPatientId = selectedPatientId || patient?.id;
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,_#dbe8f8_0%,_#eff4fb_45%,_#f7faff_100%)]">
       {/* Header */}
-      <header className="bg-white border-b-2 border-gray-200 sticky top-0 z-30">
+      <header className="bg-white/95 backdrop-blur border-b border-[#d6e2f1] sticky top-0 z-30">
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <Heart className="w-8 h-8 text-blue-600" />
-              <span className="text-2xl font-bold text-gray-900">CareCheck</span>
+              <Heart className="w-8 h-8 text-[#2f5f9f]" />
+              <span className="text-2xl font-bold text-gray-900">guardian.ai</span>
             </div>
             <div className="flex items-center gap-3">
               <NotificationBell userId={session.user.id} />
               <button
                 onClick={() => signOut({ callbackUrl: "/" })}
-                className="flex items-center gap-2 px-4 py-2.5 rounded-xl hover:bg-gray-100 transition-colors text-gray-700 font-medium"
+                className="flex items-center gap-2 px-4 py-2.5 rounded-xl hover:bg-[#f0f5fd] transition-colors text-gray-700 font-medium border border-[#d8e2f1]"
               >
                 <LogOut className="w-5 h-5" />
                 <span className="hidden sm:inline">Sign Out</span>
               </button>
-              <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
-                <span className="text-blue-600 font-semibold text-lg">
+              <div className="w-12 h-12 bg-[#dbe8f8] rounded-full flex items-center justify-center border border-[#c6d7ec]">
+                <span className="text-[#2f5f9f] font-semibold text-lg">
                   {session.user?.name?.split(" ").map((n) => n[0]).join("").slice(0, 2) || "U"}
                 </span>
               </div>
@@ -181,7 +181,10 @@ export default function DashboardPage() {
       {/* Main Content */}
       <main className="container mx-auto px-4 py-8 max-w-4xl">
         {/* Welcome Section */}
-        <div className="bg-white rounded-2xl p-8 shadow-sm border border-gray-100 mb-8">
+        <div className="bg-white/95 rounded-2xl p-8 shadow-[0_18px_42px_rgba(25,48,88,0.10)] border border-[#d8e2f1] mb-8">
+          <span className="inline-flex rounded-full border border-[#d8e2f1] bg-[#f2f6fd] px-3 py-1 text-xs font-semibold uppercase tracking-wide text-[#2f5f9f] mb-4">
+            Care Dashboard
+          </span>
           <h1 className="text-3xl font-bold text-gray-900 mb-2">
             Welcome, {userName}!
           </h1>
@@ -208,8 +211,8 @@ export default function DashboardPage() {
                 onClick={() => setActiveTab("tasks")}
                 className={`px-5 py-3 rounded-xl font-semibold text-base transition-colors ${
                   activeTab === "tasks"
-                    ? "bg-blue-600 text-white shadow-md ring-2 ring-blue-300"
-                    : "bg-white text-gray-800 hover:bg-blue-50 border-2 border-gray-200"
+                    ? "bg-[#2f5f9f] text-white shadow-[0_10px_20px_rgba(47,95,159,0.30)] ring-2 ring-[#9cbbe2]"
+                    : "bg-white text-gray-800 hover:bg-[#eff5ff] border-2 border-[#d6e2f1]"
                 }`}
               >
                 Today&apos;s Tasks
@@ -218,8 +221,8 @@ export default function DashboardPage() {
                 onClick={() => setActiveTab("scan")}
                 className={`px-5 py-3 rounded-xl font-semibold text-base transition-colors flex items-center gap-2 ${
                   activeTab === "scan"
-                    ? "bg-blue-600 text-white shadow-md ring-2 ring-blue-300"
-                    : "bg-white text-gray-800 hover:bg-blue-50 border-2 border-gray-200"
+                    ? "bg-[#2f5f9f] text-white shadow-[0_10px_20px_rgba(47,95,159,0.30)] ring-2 ring-[#9cbbe2]"
+                    : "bg-white text-gray-800 hover:bg-[#eff5ff] border-2 border-[#d6e2f1]"
                 }`}
               >
                 <Upload className="w-5 h-5" />
@@ -229,8 +232,8 @@ export default function DashboardPage() {
                 onClick={() => setActiveTab("history")}
                 className={`px-5 py-3 rounded-xl font-semibold text-base transition-colors flex items-center gap-2 ${
                   activeTab === "history"
-                    ? "bg-blue-600 text-white shadow-md ring-2 ring-blue-300"
-                    : "bg-white text-gray-800 hover:bg-blue-50 border-2 border-gray-200"
+                    ? "bg-[#2f5f9f] text-white shadow-[0_10px_20px_rgba(47,95,159,0.30)] ring-2 ring-[#9cbbe2]"
+                    : "bg-white text-gray-800 hover:bg-[#eff5ff] border-2 border-[#d6e2f1]"
                 }`}
               >
                 <History className="w-5 h-5" />
@@ -240,8 +243,8 @@ export default function DashboardPage() {
                 onClick={() => setActiveTab("medications")}
                 className={`px-5 py-3 rounded-xl font-semibold text-base transition-colors flex items-center gap-2 ${
                   activeTab === "medications"
-                    ? "bg-blue-600 text-white shadow-md ring-2 ring-blue-300"
-                    : "bg-white text-gray-800 hover:bg-blue-50 border-2 border-gray-200"
+                    ? "bg-[#2f5f9f] text-white shadow-[0_10px_20px_rgba(47,95,159,0.30)] ring-2 ring-[#9cbbe2]"
+                    : "bg-white text-gray-800 hover:bg-[#eff5ff] border-2 border-[#d6e2f1]"
                 }`}
               >
                 <Pill className="w-5 h-5" />
@@ -253,8 +256,8 @@ export default function DashboardPage() {
             onClick={() => setActiveTab("connections")}
             className={`px-5 py-3 rounded-xl font-semibold text-base transition-colors flex items-center gap-2 ${
               activeTab === "connections"
-                ? "bg-blue-600 text-white shadow-md ring-2 ring-blue-300"
-                : "bg-white text-gray-800 hover:bg-blue-50 border-2 border-gray-200"
+                ? "bg-[#2f5f9f] text-white shadow-[0_10px_20px_rgba(47,95,159,0.30)] ring-2 ring-[#9cbbe2]"
+                : "bg-white text-gray-800 hover:bg-[#eff5ff] border-2 border-[#d6e2f1]"
             }`}
           >
             <Users className="w-5 h-5" />
@@ -263,14 +266,14 @@ export default function DashboardPage() {
         </div>
 
         {/* Tab Content */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8">
+        <div className="bg-white/95 rounded-2xl shadow-[0_18px_42px_rgba(25,48,88,0.10)] border border-[#d8e2f1] p-8">
           {activeTab === "tasks" && currentPatientId && (
             <div>
               <div className="flex items-center justify-between mb-6">
                 <h2 className="text-xl font-bold text-gray-900">Tasks</h2>
                 <button
                   onClick={() => setShowAddTask(true)}
-                  className="flex items-center gap-2 px-5 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors text-base font-semibold"
+                  className="flex items-center gap-2 px-5 py-3 bg-[#2f5f9f] text-white rounded-xl hover:bg-[#224978] transition-colors text-base font-semibold shadow-[0_10px_20px_rgba(47,95,159,0.26)]"
                 >
                   <Plus className="w-5 h-5" />
                   Add Task
@@ -352,7 +355,7 @@ export default function DashboardPage() {
               </p>
               <button
                 onClick={() => setActiveTab("connections")}
-                className="text-lg text-blue-700 hover:text-blue-800 font-semibold underline"
+                className="text-lg text-[#2f5f9f] hover:text-[#224978] font-semibold underline"
               >
                 Go to Connections →
               </button>
