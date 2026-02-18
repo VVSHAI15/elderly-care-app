@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { Heart, Plus, Upload, LogOut, Loader2, Users, History, Pill } from "lucide-react";
+import { Heart, Plus, Upload, LogOut, Loader2, Users, History, Pill, ArrowLeft } from "lucide-react";
 import { signOut } from "next-auth/react";
 import { DocumentScanner } from "@/components/documents/DocumentScanner";
 import { TaskList } from "@/components/tasks/TaskList";
@@ -13,6 +13,7 @@ import { InviteManager } from "@/components/connections/InviteManager";
 import { ConnectToPatient } from "@/components/connections/ConnectToPatient";
 import { UploadHistory } from "@/components/documents/UploadHistory";
 import { MedicationsList } from "@/components/medications/MedicationsList";
+import { CaretakerDashboard } from "@/components/dashboard/CaretakerDashboard";
 
 interface PatientData {
   id: string;
@@ -20,6 +21,10 @@ interface PatientData {
   dateOfBirth: string | null;
   medicalNotes: string | null;
   emergencyContact: string | null;
+  user?: {
+    name: string | null;
+    email: string;
+  };
 }
 
 interface Connection {
@@ -48,6 +53,7 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [taskListKey, setTaskListKey] = useState(0);
   const [medicationsKey, setMedicationsKey] = useState(0);
+  const [viewingPatientDetail, setViewingPatientDetail] = useState(false);
 
   const fetchConnections = useCallback(async () => {
     try {
@@ -120,6 +126,7 @@ export default function DashboardPage() {
 
   const handleSelectPatient = async (patientId: string) => {
     setSelectedPatientId(patientId);
+    setViewingPatientDetail(true);
     try {
       const response = await fetch(`/api/patients/${patientId}`);
       if (response.ok) {
@@ -130,6 +137,12 @@ export default function DashboardPage() {
     } catch (error) {
       console.error("Failed to fetch patient:", error);
     }
+  };
+
+  const handleBackToDashboard = () => {
+    setViewingPatientDetail(false);
+    setSelectedPatientId(null);
+    setPatient(null);
   };
 
   if (status === "loading" || loading) {
@@ -148,6 +161,7 @@ export default function DashboardPage() {
   const userRole = session.user?.role;
   const isPatient = userRole === "PATIENT";
   const currentPatientId = selectedPatientId || patient?.id;
+  const showCaretakerDashboard = !isPatient && !viewingPatientDetail;
 
   return (
     <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,_#dbe8f8_0%,_#eff4fb_45%,_#f7faff_100%)]">
@@ -179,11 +193,21 @@ export default function DashboardPage() {
       </header>
 
       {/* Main Content */}
-      <main className="container mx-auto px-4 py-8 max-w-4xl">
+      <main className="container mx-auto px-4 py-8 max-w-5xl">
         {/* Welcome Section */}
         <div className="bg-white/95 rounded-2xl p-8 shadow-[0_18px_42px_rgba(25,48,88,0.10)] border border-[#d8e2f1] mb-8">
+          {/* Back button when viewing a specific patient */}
+          {!isPatient && viewingPatientDetail && (
+            <button
+              onClick={handleBackToDashboard}
+              className="flex items-center gap-2 text-[#2f5f9f] hover:text-[#224978] font-semibold mb-4 transition-colors"
+            >
+              <ArrowLeft className="w-5 h-5" />
+              Back to Dashboard
+            </button>
+          )}
           <span className="inline-flex rounded-full border border-[#d8e2f1] bg-[#f2f6fd] px-3 py-1 text-xs font-semibold uppercase tracking-wide text-[#2f5f9f] mb-4">
-            Care Dashboard
+            {showCaretakerDashboard ? "Caretaker Dashboard" : "Care Dashboard"}
           </span>
           <h1 className="text-3xl font-bold text-gray-900 mb-2">
             Welcome, {userName}!
@@ -192,185 +216,210 @@ export default function DashboardPage() {
             <p className="text-lg text-gray-700">
               Manage your medications, tasks, and connections below.
             </p>
-          ) : !isPatient && connectedPatients.length > 0 ? (
+          ) : showCaretakerDashboard && connectedPatients.length > 0 ? (
             <p className="text-lg text-gray-700">
-              You&apos;re caring for {connectedPatients.length} patient{connectedPatients.length > 1 ? "s" : ""}.
+              You&apos;re caring for {connectedPatients.length} patient{connectedPatients.length > 1 ? "s" : ""}. Here&apos;s an overview of everyone&apos;s care.
             </p>
-          ) : !isPatient ? (
+          ) : showCaretakerDashboard ? (
             <p className="text-lg text-gray-700">
               Connect with a patient to start helping with their care.
+            </p>
+          ) : !isPatient && viewingPatientDetail && patient ? (
+            <p className="text-lg text-gray-700">
+              Viewing care details for <span className="font-semibold">{patient.user?.name || "this patient"}</span>.
             </p>
           ) : null}
         </div>
 
-        {/* Tab Navigation */}
-        <div className="flex gap-3 mb-8 flex-wrap">
-          {currentPatientId && (
-            <>
-              <button
-                onClick={() => setActiveTab("tasks")}
-                className={`px-5 py-3 rounded-xl font-semibold text-base transition-colors ${
-                  activeTab === "tasks"
-                    ? "bg-[#2f5f9f] text-white shadow-[0_10px_20px_rgba(47,95,159,0.30)] ring-2 ring-[#9cbbe2]"
-                    : "bg-white text-gray-800 hover:bg-[#eff5ff] border-2 border-[#d6e2f1]"
-                }`}
-              >
-                Today&apos;s Tasks
-              </button>
-              <button
-                onClick={() => setActiveTab("scan")}
-                className={`px-5 py-3 rounded-xl font-semibold text-base transition-colors flex items-center gap-2 ${
-                  activeTab === "scan"
-                    ? "bg-[#2f5f9f] text-white shadow-[0_10px_20px_rgba(47,95,159,0.30)] ring-2 ring-[#9cbbe2]"
-                    : "bg-white text-gray-800 hover:bg-[#eff5ff] border-2 border-[#d6e2f1]"
-                }`}
-              >
-                <Upload className="w-5 h-5" />
-                Scan Document
-              </button>
-              <button
-                onClick={() => setActiveTab("history")}
-                className={`px-5 py-3 rounded-xl font-semibold text-base transition-colors flex items-center gap-2 ${
-                  activeTab === "history"
-                    ? "bg-[#2f5f9f] text-white shadow-[0_10px_20px_rgba(47,95,159,0.30)] ring-2 ring-[#9cbbe2]"
-                    : "bg-white text-gray-800 hover:bg-[#eff5ff] border-2 border-[#d6e2f1]"
-                }`}
-              >
-                <History className="w-5 h-5" />
-                Upload History
-              </button>
-              <button
-                onClick={() => setActiveTab("medications")}
-                className={`px-5 py-3 rounded-xl font-semibold text-base transition-colors flex items-center gap-2 ${
-                  activeTab === "medications"
-                    ? "bg-[#2f5f9f] text-white shadow-[0_10px_20px_rgba(47,95,159,0.30)] ring-2 ring-[#9cbbe2]"
-                    : "bg-white text-gray-800 hover:bg-[#eff5ff] border-2 border-[#d6e2f1]"
-                }`}
-              >
-                <Pill className="w-5 h-5" />
-                Medications
-              </button>
-            </>
-          )}
-          <button
-            onClick={() => setActiveTab("connections")}
-            className={`px-5 py-3 rounded-xl font-semibold text-base transition-colors flex items-center gap-2 ${
-              activeTab === "connections"
-                ? "bg-[#2f5f9f] text-white shadow-[0_10px_20px_rgba(47,95,159,0.30)] ring-2 ring-[#9cbbe2]"
-                : "bg-white text-gray-800 hover:bg-[#eff5ff] border-2 border-[#d6e2f1]"
-            }`}
-          >
-            <Users className="w-5 h-5" />
-            {isPatient ? "My Team" : "My Patients"}
-          </button>
-        </div>
+        {/* Caretaker Multi-Patient Dashboard */}
+        {showCaretakerDashboard ? (
+          <div className="space-y-6">
+            <div className="bg-white/95 rounded-2xl shadow-[0_18px_42px_rgba(25,48,88,0.10)] border border-[#d8e2f1] p-8">
+              <CaretakerDashboard onSelectPatient={handleSelectPatient} />
+            </div>
 
-        {/* Tab Content */}
-        <div className="bg-white/95 rounded-2xl shadow-[0_18px_42px_rgba(25,48,88,0.10)] border border-[#d8e2f1] p-8">
-          {activeTab === "tasks" && currentPatientId && (
-            <div>
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-xl font-bold text-gray-900">Tasks</h2>
-                <button
-                  onClick={() => setShowAddTask(true)}
-                  className="flex items-center gap-2 px-5 py-3 bg-[#2f5f9f] text-white rounded-xl hover:bg-[#224978] transition-colors text-base font-semibold shadow-[0_10px_20px_rgba(47,95,159,0.26)]"
-                >
-                  <Plus className="w-5 h-5" />
-                  Add Task
-                </button>
-              </div>
-              <TaskList
-                key={taskListKey}
-                patientId={currentPatientId}
-                connections={connections}
+            {/* Connect to more patients */}
+            <div className="bg-white/95 rounded-2xl shadow-[0_18px_42px_rgba(25,48,88,0.10)] border border-[#d8e2f1] p-8">
+              <h2 className="text-xl font-bold text-gray-900 mb-4">Connect to a Patient</h2>
+              <ConnectToPatient
+                connectedPatients={connectedPatients}
+                onConnect={fetchConnections}
+                onSelectPatient={handleSelectPatient}
               />
             </div>
-          )}
-
-          {activeTab === "scan" && currentPatientId && (
-            <div>
-              <h2 className="text-xl font-bold text-gray-900 mb-4">
-                Scan Discharge Papers
-              </h2>
-              <p className="text-lg text-gray-700 mb-6">
-                Upload a photo, PDF, or image of discharge papers or prescriptions. We&apos;ll
-                automatically extract medication information. You&apos;ll be able to review
-                and edit before saving.
-              </p>
-              <DocumentScanner
-                patientId={currentPatientId}
-                onScanComplete={() => {
-                  setTaskListKey((k) => k + 1);
-                  setMedicationsKey((k) => k + 1);
-                }}
-              />
-            </div>
-          )}
-
-          {activeTab === "history" && currentPatientId && (
-            <div>
-              <h2 className="text-xl font-bold text-gray-900 mb-4">
-                Upload History
-              </h2>
-              <p className="text-lg text-gray-700 mb-6">
-                View all uploaded documents, who uploaded them, and their summaries.
-              </p>
-              <UploadHistory patientId={currentPatientId} />
-            </div>
-          )}
-
-          {activeTab === "medications" && currentPatientId && (
-            <div>
-              <h2 className="text-xl font-bold text-gray-900 mb-4">
-                Medications
-              </h2>
-              <MedicationsList key={medicationsKey} patientId={currentPatientId} />
-            </div>
-          )}
-
-          {activeTab === "connections" && (
-            <div>
-              <h2 className="text-xl font-bold text-gray-900 mb-4">
-                {isPatient ? "Care Team" : "Patient Connections"}
-              </h2>
-              {isPatient ? (
-                <InviteManager
-                  connections={connections}
-                  onRefresh={fetchConnections}
-                />
-              ) : (
-                <ConnectToPatient
-                  connectedPatients={connectedPatients}
-                  onConnect={fetchConnections}
-                  onSelectPatient={handleSelectPatient}
-                />
+          </div>
+        ) : (
+          <>
+            {/* Tab Navigation */}
+            <div className="flex gap-3 mb-8 flex-wrap">
+              {currentPatientId && (
+                <>
+                  <button
+                    onClick={() => setActiveTab("tasks")}
+                    className={`px-5 py-3 rounded-xl font-semibold text-base transition-colors ${
+                      activeTab === "tasks"
+                        ? "bg-[#2f5f9f] text-white shadow-[0_10px_20px_rgba(47,95,159,0.30)] ring-2 ring-[#9cbbe2]"
+                        : "bg-white text-gray-800 hover:bg-[#eff5ff] border-2 border-[#d6e2f1]"
+                    }`}
+                  >
+                    Today&apos;s Tasks
+                  </button>
+                  <button
+                    onClick={() => setActiveTab("scan")}
+                    className={`px-5 py-3 rounded-xl font-semibold text-base transition-colors flex items-center gap-2 ${
+                      activeTab === "scan"
+                        ? "bg-[#2f5f9f] text-white shadow-[0_10px_20px_rgba(47,95,159,0.30)] ring-2 ring-[#9cbbe2]"
+                        : "bg-white text-gray-800 hover:bg-[#eff5ff] border-2 border-[#d6e2f1]"
+                    }`}
+                  >
+                    <Upload className="w-5 h-5" />
+                    Scan Document
+                  </button>
+                  <button
+                    onClick={() => setActiveTab("history")}
+                    className={`px-5 py-3 rounded-xl font-semibold text-base transition-colors flex items-center gap-2 ${
+                      activeTab === "history"
+                        ? "bg-[#2f5f9f] text-white shadow-[0_10px_20px_rgba(47,95,159,0.30)] ring-2 ring-[#9cbbe2]"
+                        : "bg-white text-gray-800 hover:bg-[#eff5ff] border-2 border-[#d6e2f1]"
+                    }`}
+                  >
+                    <History className="w-5 h-5" />
+                    Upload History
+                  </button>
+                  <button
+                    onClick={() => setActiveTab("medications")}
+                    className={`px-5 py-3 rounded-xl font-semibold text-base transition-colors flex items-center gap-2 ${
+                      activeTab === "medications"
+                        ? "bg-[#2f5f9f] text-white shadow-[0_10px_20px_rgba(47,95,159,0.30)] ring-2 ring-[#9cbbe2]"
+                        : "bg-white text-gray-800 hover:bg-[#eff5ff] border-2 border-[#d6e2f1]"
+                    }`}
+                  >
+                    <Pill className="w-5 h-5" />
+                    Medications
+                  </button>
+                </>
               )}
-            </div>
-          )}
-
-          {!currentPatientId && activeTab !== "connections" && (
-            <div className="text-center py-12">
-              <p className="text-lg text-gray-700 mb-6">
-                Connect with a patient first to view their information.
-              </p>
               <button
                 onClick={() => setActiveTab("connections")}
-                className="text-lg text-[#2f5f9f] hover:text-[#224978] font-semibold underline"
+                className={`px-5 py-3 rounded-xl font-semibold text-base transition-colors flex items-center gap-2 ${
+                  activeTab === "connections"
+                    ? "bg-[#2f5f9f] text-white shadow-[0_10px_20px_rgba(47,95,159,0.30)] ring-2 ring-[#9cbbe2]"
+                    : "bg-white text-gray-800 hover:bg-[#eff5ff] border-2 border-[#d6e2f1]"
+                }`}
               >
-                Go to Connections →
+                <Users className="w-5 h-5" />
+                {isPatient ? "My Team" : "My Patients"}
               </button>
             </div>
-          )}
-        </div>
 
-        {/* Add Task Modal */}
-        {showAddTask && currentPatientId && (
-          <AddTaskModal
-            patientId={currentPatientId}
-            connections={connections}
-            onClose={() => setShowAddTask(false)}
-            onTaskCreated={() => setTaskListKey((k) => k + 1)}
-          />
+            {/* Tab Content */}
+            <div className="bg-white/95 rounded-2xl shadow-[0_18px_42px_rgba(25,48,88,0.10)] border border-[#d8e2f1] p-8">
+              {activeTab === "tasks" && currentPatientId && (
+                <div>
+                  <div className="flex items-center justify-between mb-6">
+                    <h2 className="text-xl font-bold text-gray-900">Tasks</h2>
+                    <button
+                      onClick={() => setShowAddTask(true)}
+                      className="flex items-center gap-2 px-5 py-3 bg-[#2f5f9f] text-white rounded-xl hover:bg-[#224978] transition-colors text-base font-semibold shadow-[0_10px_20px_rgba(47,95,159,0.26)]"
+                    >
+                      <Plus className="w-5 h-5" />
+                      Add Task
+                    </button>
+                  </div>
+                  <TaskList
+                    key={taskListKey}
+                    patientId={currentPatientId}
+                    connections={connections}
+                  />
+                </div>
+              )}
+
+              {activeTab === "scan" && currentPatientId && (
+                <div>
+                  <h2 className="text-xl font-bold text-gray-900 mb-4">
+                    Scan Discharge Papers
+                  </h2>
+                  <p className="text-lg text-gray-700 mb-6">
+                    Upload a photo, PDF, or image of discharge papers or prescriptions. We&apos;ll
+                    automatically extract medication information. You&apos;ll be able to review
+                    and edit before saving.
+                  </p>
+                  <DocumentScanner
+                    patientId={currentPatientId}
+                    onScanComplete={() => {
+                      setTaskListKey((k) => k + 1);
+                      setMedicationsKey((k) => k + 1);
+                    }}
+                  />
+                </div>
+              )}
+
+              {activeTab === "history" && currentPatientId && (
+                <div>
+                  <h2 className="text-xl font-bold text-gray-900 mb-4">
+                    Upload History
+                  </h2>
+                  <p className="text-lg text-gray-700 mb-6">
+                    View all uploaded documents, who uploaded them, and their summaries.
+                  </p>
+                  <UploadHistory patientId={currentPatientId} />
+                </div>
+              )}
+
+              {activeTab === "medications" && currentPatientId && (
+                <div>
+                  <h2 className="text-xl font-bold text-gray-900 mb-4">
+                    Medications
+                  </h2>
+                  <MedicationsList key={medicationsKey} patientId={currentPatientId} />
+                </div>
+              )}
+
+              {activeTab === "connections" && (
+                <div>
+                  <h2 className="text-xl font-bold text-gray-900 mb-4">
+                    {isPatient ? "Care Team" : "Patient Connections"}
+                  </h2>
+                  {isPatient ? (
+                    <InviteManager
+                      connections={connections}
+                      onRefresh={fetchConnections}
+                    />
+                  ) : (
+                    <ConnectToPatient
+                      connectedPatients={connectedPatients}
+                      onConnect={fetchConnections}
+                      onSelectPatient={handleSelectPatient}
+                    />
+                  )}
+                </div>
+              )}
+
+              {!currentPatientId && activeTab !== "connections" && (
+                <div className="text-center py-12">
+                  <p className="text-lg text-gray-700 mb-6">
+                    Connect with a patient first to view their information.
+                  </p>
+                  <button
+                    onClick={() => setActiveTab("connections")}
+                    className="text-lg text-[#2f5f9f] hover:text-[#224978] font-semibold underline"
+                  >
+                    Go to Connections →
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Add Task Modal */}
+            {showAddTask && currentPatientId && (
+              <AddTaskModal
+                patientId={currentPatientId}
+                connections={connections}
+                onClose={() => setShowAddTask(false)}
+                onTaskCreated={() => setTaskListKey((k) => k + 1)}
+              />
+            )}
+          </>
         )}
       </main>
     </div>
