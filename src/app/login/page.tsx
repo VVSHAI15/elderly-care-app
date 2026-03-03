@@ -4,7 +4,7 @@ import { useState } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Heart, Loader2 } from "lucide-react";
+import { Heart, Loader2, Building2 } from "lucide-react";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -28,7 +28,17 @@ export default function LoginPage() {
       if (result?.error) {
         setError("Invalid email or password");
       } else {
-        router.push("/dashboard");
+        // Fetch session to route to correct page by role
+        const res = await fetch("/api/auth/session");
+        const sessionData = await res.json();
+        const role = sessionData?.user?.role;
+        if (role === "ADMIN") {
+          router.push("/admin");
+        } else if (role === "FAMILY_MEMBER") {
+          router.push("/family");
+        } else {
+          router.push("/dashboard");
+        }
         router.refresh();
       }
     } catch {
@@ -115,6 +125,14 @@ export default function LoginPage() {
                 Sign up
               </Link>
             </p>
+
+            <div className="mt-4 pt-4 border-t border-gray-100 flex items-center justify-center gap-2">
+              <Building2 className="w-4 h-4 text-gray-400" />
+              <span className="text-sm text-gray-500">Running a care company?{" "}</span>
+              <Link href="/register-company" className="text-sm text-[#2f5f9f] hover:text-[#224978] font-semibold underline">
+                Register your organization
+              </Link>
+            </div>
           </div>
         </div>
       </main>

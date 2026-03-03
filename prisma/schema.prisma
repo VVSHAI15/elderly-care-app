@@ -7,27 +7,42 @@ datasource db {
   url      = "file:./dev.db"
 }
 
+model Organization {
+  id        String    @id @default(cuid())
+  name      String
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  members   User[]
+  patients  Patient[]
+}
+
 model User {
-  id            String    @id @default(cuid())
-  email         String    @unique
-  emailVerified DateTime?
-  name          String?
-  password      String?
-  image         String?
-  role          Role      @default(FAMILY_MEMBER)
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  id             String        @id @default(cuid())
+  email          String        @unique
+  emailVerified  DateTime?
+  name           String?
+  password       String?
+  image          String?
+  role           Role          @default(FAMILY_MEMBER)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  // Organization (for company admins and caregivers)
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id])
 
   // NextAuth relations
   accounts      Account[]
   sessions      Session[]
 
   // App relations
-  patient       Patient?  @relation("PatientUser")
-  familyOf      Patient[] @relation("FamilyMembers")
-  notifications Notification[]
-  uploadedDocuments Document[] @relation("UploadedDocuments")
-  assignedTasks Task[] @relation("AssignedTasks")
+  patient           Patient?       @relation("PatientUser")
+  familyOf          Patient[]      @relation("FamilyMembers")
+  notifications     Notification[]
+  uploadedDocuments Document[]     @relation("UploadedDocuments")
+  assignedTasks     Task[]         @relation("AssignedTasks")
+  caregiverShifts   Shift[]        @relation("CaregiverShifts")
 }
 
 model Account {
@@ -66,33 +81,48 @@ model VerificationToken {
 }
 
 model Patient {
-  id              String   @id @default(cuid())
-  userId          String   @unique
-  user            User     @relation("PatientUser", fields: [userId], references: [id], onDelete: Cascade)
-  dateOfBirth     DateTime?
-  medicalNotes    String?
+  id               String        @id @default(cuid())
+  userId           String        @unique
+  user             User          @relation("PatientUser", fields: [userId], references: [id], onDelete: Cascade)
+  dateOfBirth      DateTime?
+  medicalNotes     String?
   emergencyContact String?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  // Organization (for company-managed patients)
+  organizationId   String?
+  organization     Organization? @relation(fields: [organizationId], references: [id])
+
+  // Family visibility settings (admin-controlled)
+  familyCanViewTasks   Boolean @default(true)
+  familyCanViewMeds    Boolean @default(true)
+  familyCanViewMetrics Boolean @default(true)
+  familyCanViewShifts  Boolean @default(true)
 
   // Relations
-  familyMembers   User[]       @relation("FamilyMembers")
+  familyMembers   User[]         @relation("FamilyMembers")
   tasks           Task[]
   medications     Medication[]
   documents       Document[]
   inviteCodes     InviteCode[]
+  shifts          Shift[]
+  healthMetrics   HealthMetric[]
 }
 
 model InviteCode {
-  id        String   @id @default(cuid())
-  code      String   @unique
-  patientId String
-  patient   Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
-  createdBy String   // User ID who created the invite
-  usedBy    String?  // User ID who used the invite
-  usedAt    DateTime?
-  expiresAt DateTime
-  createdAt DateTime @default(now())
+  id              String   @id @default(cuid())
+  code            String   @unique
+  patientId       String?  // null for org caregiver invites
+  patient         Patient? @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  organizationId  String?  // set for org caregiver invites
+  targetEmail     String?  // email the invite was sent to (for org invites)
+  inviteType      String   @default("PATIENT") // "PATIENT" | "CAREGIVER_ORG" | "FAMILY"
+  createdBy       String   // User ID who created the invite
+  usedBy          String?  // User ID who used the invite
+  usedAt          DateTime?
+  expiresAt       DateTime
+  createdAt       DateTime @default(now())
 }
 
 model Task {
@@ -184,6 +214,32 @@ model Notification {
   // Delivery status
   emailSent Boolean @default(false)
   pushSent  Boolean @default(false)
+}
+
+model Shift {
+  id          String    @id @default(cuid())
+  caregiverId String
+  caregiver   User      @relation("CaregiverShifts", fields: [caregiverId], references: [id])
+  patientId   String
+  patient     Patient   @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  clockIn     DateTime  @default(now())
+  clockOut    DateTime?
+  notes       String?
+  createdAt   DateTime  @default(now())
+}
+
+model HealthMetric {
+  id               String   @id @default(cuid())
+  patientId        String
+  patient          Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  type             String   // "blood_pressure", "blood_glucose", "weight", "heart_rate", "oxygen_saturation", "temperature"
+  value            String   // "120/80", "95", "165.5"
+  unit             String?  // "mmHg", "mg/dL", "lbs", "bpm", "%", "°F"
+  recordedAt       DateTime
+  recordedById     String?
+  notes            String?
+  sourceDocumentId String?
+  createdAt        DateTime @default(now())
 }
 
 enum Role {

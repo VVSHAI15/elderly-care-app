@@ -1,10 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, Suspense } from "react";
 import { signIn } from "next-auth/react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { Heart, Loader2, User, Users, Stethoscope } from "lucide-react";
+import { Heart, Loader2, User, Users, Stethoscope, Building2 } from "lucide-react";
 
 type Role = "PATIENT" | "FAMILY_MEMBER" | "CAREGIVER";
 
@@ -18,21 +18,21 @@ const roles: { value: Role; label: string; description: string; icon: React.Reac
   {
     value: "FAMILY_MEMBER",
     label: "Family member",
-    description: "I help care for a loved one",
+    description: "I help monitor a loved one's care",
     icon: <Users className="w-6 h-6" />,
-  },
-  {
-    value: "CAREGIVER",
-    label: "Professional caregiver",
-    description: "I provide care professionally",
-    icon: <Stethoscope className="w-6 h-6" />,
   },
 ];
 
-export default function RegisterPage() {
+function RegisterForm() {
   const router = useRouter();
-  const [step, setStep] = useState<1 | 2>(1);
-  const [role, setRole] = useState<Role | null>(null);
+  const searchParams = useSearchParams();
+  const orgInviteCode = searchParams.get("orgInvite");
+  const familyInviteCode = searchParams.get("familyInvite");
+  const isInvited = !!(orgInviteCode || familyInviteCode);
+  const [step, setStep] = useState<1 | 2>(isInvited ? 2 : 1);
+  const [role, setRole] = useState<Role | null>(
+    orgInviteCode ? "CAREGIVER" : familyInviteCode ? "FAMILY_MEMBER" : null
+  );
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -65,7 +65,14 @@ export default function RegisterPage() {
       const response = await fetch("/api/auth/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, email, password, role }),
+        body: JSON.stringify({
+          name,
+          email,
+          password,
+          role,
+          ...(orgInviteCode ? { orgInviteCode } : {}),
+          ...(familyInviteCode ? { familyInviteCode } : {}),
+        }),
       });
 
       const data = await response.json();
@@ -85,7 +92,9 @@ export default function RegisterPage() {
       if (result?.error) {
         setError("Account created but failed to sign in. Please try logging in.");
       } else {
-        router.push("/dashboard");
+        // Route to correct page based on role
+        const destination = role === "FAMILY_MEMBER" ? "/family" : "/dashboard";
+        router.push(destination);
         router.refresh();
       }
     } catch {
@@ -107,7 +116,20 @@ export default function RegisterPage() {
       <main className="flex-1 flex items-center justify-center px-4 py-8">
         <div className="w-full max-w-md">
           <div className="bg-white/95 rounded-2xl shadow-[0_22px_48px_rgba(20,44,86,0.14)] border border-[#d8e2f1] p-10">
-            {step === 1 ? (
+            {orgInviteCode && (
+              <div className="bg-[#f0f5fd] border-2 border-[#d8e2f1] rounded-xl px-4 py-3 mb-6">
+                <p className="text-sm font-semibold text-[#2f5f9f]">You&apos;ve been invited to join a care team!</p>
+                <p className="text-sm text-gray-600 mt-0.5">Fill in your details below to set up your caregiver account.</p>
+              </div>
+            )}
+            {familyInviteCode && (
+              <div className="bg-[#f0f5fd] border-2 border-[#d8e2f1] rounded-xl px-4 py-3 mb-6">
+                <p className="text-sm font-semibold text-[#2f5f9f]">You&apos;ve been invited to a family care dashboard!</p>
+                <p className="text-sm text-gray-600 mt-0.5">Create your free account to view your family member&apos;s care progress and health trends.</p>
+              </div>
+            )}
+
+          {step === 1 ? (
               <>
                 <span className="inline-flex rounded-full border border-[#d8e2f1] bg-[#f2f6fd] px-3 py-1 text-xs font-semibold uppercase tracking-wide text-[#2f5f9f] mb-5">
                   Quick Setup
@@ -139,15 +161,34 @@ export default function RegisterPage() {
                     Sign in
                   </Link>
                 </p>
+
+                {/* Caregiver & company callouts */}
+                <div className="mt-4 pt-4 border-t border-gray-100 space-y-2">
+                  <div className="flex items-start gap-2 p-3 bg-[#f8f9fb] rounded-xl">
+                    <Stethoscope className="w-4 h-4 text-gray-400 mt-0.5 flex-shrink-0" />
+                    <p className="text-sm text-gray-500">
+                      <strong className="text-gray-700">Professional caregiver?</strong> You should have received an invite email from your employer. Use that link to register.
+                    </p>
+                  </div>
+                  <div className="flex items-start gap-2 p-3 bg-[#f8f9fb] rounded-xl">
+                    <Building2 className="w-4 h-4 text-gray-400 mt-0.5 flex-shrink-0" />
+                    <p className="text-sm text-gray-500">
+                      <strong className="text-gray-700">Running a home care company?</strong>{" "}
+                      <Link href="/register-company" className="text-[#2f5f9f] font-semibold underline">Register your organization here.</Link>
+                    </p>
+                  </div>
+                </div>
               </>
             ) : (
               <>
-                <button
-                  onClick={() => setStep(1)}
-                  className="text-base text-gray-700 hover:text-gray-900 mb-6 font-medium flex items-center gap-1"
-                >
-                  &larr; Back
-                </button>
+                {!isInvited && (
+                  <button
+                    onClick={() => setStep(1)}
+                    className="text-base text-gray-700 hover:text-gray-900 mb-6 font-medium flex items-center gap-1"
+                  >
+                    &larr; Back
+                  </button>
+                )}
                 <span className="inline-flex rounded-full border border-[#d8e2f1] bg-[#f2f6fd] px-3 py-1 text-xs font-semibold uppercase tracking-wide text-[#2f5f9f] mb-5">
                   Profile Details
                 </span>
@@ -155,6 +196,8 @@ export default function RegisterPage() {
                 <p className="text-lg text-gray-700 mb-8">
                   {role === "PATIENT"
                     ? "Set up your personal care account"
+                    : role === "FAMILY_MEMBER"
+                    ? "Create your family dashboard account"
                     : "Create your caregiver account"}
                 </p>
 
@@ -253,5 +296,13 @@ export default function RegisterPage() {
         </div>
       </main>
     </div>
+  );
+}
+
+export default function RegisterPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-[#edf2fa] flex items-center justify-center"><Loader2 className="w-10 h-10 text-[#2f5f9f] animate-spin" /></div>}>
+      <RegisterForm />
+    </Suspense>
   );
 }

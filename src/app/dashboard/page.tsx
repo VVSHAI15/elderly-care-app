@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { Heart, Plus, Upload, LogOut, Loader2, Users, History, Pill, ArrowLeft } from "lucide-react";
+import { Heart, Plus, Upload, LogOut, Loader2, Users, History, Pill, ArrowLeft, Activity, Clock } from "lucide-react";
 import { signOut } from "next-auth/react";
 import { DocumentScanner } from "@/components/documents/DocumentScanner";
 import { TaskList } from "@/components/tasks/TaskList";
@@ -14,6 +14,8 @@ import { ConnectToPatient } from "@/components/connections/ConnectToPatient";
 import { UploadHistory } from "@/components/documents/UploadHistory";
 import { MedicationsList } from "@/components/medications/MedicationsList";
 import { CaretakerDashboard } from "@/components/dashboard/CaretakerDashboard";
+import { ClockInOut } from "@/components/caregiver/ClockInOut";
+import { HealthMetricLogger } from "@/components/caregiver/HealthMetricLogger";
 
 interface PatientData {
   id: string;
@@ -44,7 +46,7 @@ interface ConnectedPatient {
 export default function DashboardPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<"tasks" | "scan" | "medications" | "connections" | "history">("tasks");
+  const [activeTab, setActiveTab] = useState<"tasks" | "scan" | "medications" | "connections" | "history" | "vitals" | "shifts">("tasks");
   const [showAddTask, setShowAddTask] = useState(false);
   const [patient, setPatient] = useState<PatientData | null>(null);
   const [connections, setConnections] = useState<Connection[]>([]);
@@ -74,8 +76,12 @@ export default function DashboardPage() {
   useEffect(() => {
     if (status === "unauthenticated") {
       router.push("/login");
+    } else if (status === "authenticated" && session?.user?.role === "ADMIN") {
+      router.push("/admin");
+    } else if (status === "authenticated" && session?.user?.role === "FAMILY_MEMBER") {
+      router.push("/family");
     }
-  }, [status, router]);
+  }, [status, session, router]);
 
   useEffect(() => {
     async function fetchPatientData() {
@@ -160,6 +166,8 @@ export default function DashboardPage() {
   const userName = session.user?.name?.split(" ")[0] || "there";
   const userRole = session.user?.role;
   const isPatient = userRole === "PATIENT";
+  const isCaregiver = userRole === "CAREGIVER";
+  const isOrgCaregiver = isCaregiver && !!session.user?.organizationId;
   const currentPatientId = selectedPatientId || patient?.id;
   const showCaretakerDashboard = !isPatient && !viewingPatientDetail;
 
@@ -238,15 +246,17 @@ export default function DashboardPage() {
               <CaretakerDashboard onSelectPatient={handleSelectPatient} />
             </div>
 
-            {/* Connect to more patients */}
-            <div className="bg-white/95 rounded-2xl shadow-[0_18px_42px_rgba(25,48,88,0.10)] border border-[#d8e2f1] p-8">
-              <h2 className="text-xl font-bold text-gray-900 mb-4">Connect to a Patient</h2>
-              <ConnectToPatient
-                connectedPatients={connectedPatients}
-                onConnect={fetchConnections}
-                onSelectPatient={handleSelectPatient}
-              />
-            </div>
+            {/* Connect to patients — only for non-org caregivers */}
+            {!isOrgCaregiver && (
+              <div className="bg-white/95 rounded-2xl shadow-[0_18px_42px_rgba(25,48,88,0.10)] border border-[#d8e2f1] p-8">
+                <h2 className="text-xl font-bold text-gray-900 mb-4">Connect to a Patient</h2>
+                <ConnectToPatient
+                  connectedPatients={connectedPatients}
+                  onConnect={fetchConnections}
+                  onSelectPatient={handleSelectPatient}
+                />
+              </div>
+            )}
           </div>
         ) : (
           <>
@@ -296,6 +306,32 @@ export default function DashboardPage() {
                   >
                     <Pill className="w-5 h-5" />
                     Medications
+                  </button>
+                </>
+              )}
+              {isCaregiver && currentPatientId && (
+                <>
+                  <button
+                    onClick={() => setActiveTab("shifts")}
+                    className={`px-5 py-3 rounded-xl font-semibold text-base transition-colors flex items-center gap-2 ${
+                      activeTab === "shifts"
+                        ? "bg-[#2f5f9f] text-white shadow-[0_10px_20px_rgba(47,95,159,0.30)] ring-2 ring-[#9cbbe2]"
+                        : "bg-white text-gray-800 hover:bg-[#eff5ff] border-2 border-[#d6e2f1]"
+                    }`}
+                  >
+                    <Clock className="w-5 h-5" />
+                    Clock In/Out
+                  </button>
+                  <button
+                    onClick={() => setActiveTab("vitals")}
+                    className={`px-5 py-3 rounded-xl font-semibold text-base transition-colors flex items-center gap-2 ${
+                      activeTab === "vitals"
+                        ? "bg-[#2f5f9f] text-white shadow-[0_10px_20px_rgba(47,95,159,0.30)] ring-2 ring-[#9cbbe2]"
+                        : "bg-white text-gray-800 hover:bg-[#eff5ff] border-2 border-[#d6e2f1]"
+                    }`}
+                  >
+                    <Activity className="w-5 h-5" />
+                    Vitals
                   </button>
                 </>
               )}
@@ -385,6 +421,12 @@ export default function DashboardPage() {
                       connections={connections}
                       onRefresh={fetchConnections}
                     />
+                  ) : isOrgCaregiver ? (
+                    <div className="text-center py-10">
+                      <Users className="w-12 h-12 text-gray-200 mx-auto mb-4" />
+                      <p className="text-gray-700 font-semibold mb-1">Patients are assigned by your manager</p>
+                      <p className="text-gray-500 text-sm">Your administrator assigns patients to you through the care company portal. Contact your manager if you believe a patient is missing.</p>
+                    </div>
                   ) : (
                     <ConnectToPatient
                       connectedPatients={connectedPatients}
@@ -392,6 +434,23 @@ export default function DashboardPage() {
                       onSelectPatient={handleSelectPatient}
                     />
                   )}
+                </div>
+              )}
+
+              {activeTab === "shifts" && currentPatientId && (
+                <div>
+                  <h2 className="text-xl font-bold text-gray-900 mb-6">Clock In / Out</h2>
+                  <ClockInOut
+                    patientId={currentPatientId}
+                    patientName={patient?.user?.name || null}
+                  />
+                </div>
+              )}
+
+              {activeTab === "vitals" && currentPatientId && (
+                <div>
+                  <h2 className="text-xl font-bold text-gray-900 mb-6">Health Vitals</h2>
+                  <HealthMetricLogger patientId={currentPatientId} />
                 </div>
               )}
 

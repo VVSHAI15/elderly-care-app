@@ -32,7 +32,7 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    if (!invite) {
+    if (!invite || !invite.patientId || invite.inviteType === "CAREGIVER_ORG") {
       return NextResponse.json(
         { error: "Invalid invite code" },
         { status: 404 }
@@ -51,6 +51,10 @@ export async function POST(request: NextRequest) {
         { error: "This invite code has expired" },
         { status: 400 }
       );
+    }
+
+    if (!invite.patient) {
+      return NextResponse.json({ error: "Patient not found" }, { status: 404 });
     }
 
     // Check if user is already connected to this patient

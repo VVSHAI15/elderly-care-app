@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Heart, FileText, Bell, CheckSquare } from "lucide-react";
+import { Heart, FileText, Bell, CheckSquare, Building2 } from "lucide-react";
 
 export default function Home() {
   return (
@@ -10,7 +10,14 @@ export default function Home() {
             <Heart className="w-9 h-9 text-[#2f5f9f]" />
             <span className="text-2xl font-bold text-gray-900">guardian.ai</span>
           </div>
-          <div className="flex gap-4">
+          <div className="flex gap-3">
+            <Link
+              href="/register-company"
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-[#2f5f9f] hover:bg-[#f0f5fd] transition-colors font-semibold border border-[#d8e2f1] text-sm"
+            >
+              <Building2 className="w-4 h-4" />
+              For Companies
+            </Link>
             <Link
               href="/login"
               className="px-5 py-3 rounded-xl text-[#1f3357] hover:text-[#12233f] hover:bg-white/70 transition-colors font-semibold text-lg"
@@ -88,6 +95,38 @@ export default function Home() {
               providing peace of mind from anywhere.
             </p>
           </div>
+        </section>
+
+        {/* For Companies Section */}
+        <section className="mt-20 bg-[#2f5f9f] rounded-3xl p-10 max-w-5xl mx-auto text-white text-center">
+          <div className="inline-flex items-center gap-2 rounded-full bg-white/20 px-4 py-1.5 text-sm font-semibold text-white mb-4">
+            <Building2 className="w-4 h-4" />
+            For Home Care Companies
+          </div>
+          <h2 className="text-3xl font-bold mb-4">
+            Power Your Agency with guardian.ai
+          </h2>
+          <p className="text-white/80 text-lg mb-8 max-w-2xl mx-auto">
+            Give your managers a full admin panel to manage caregivers and clients. Track shifts, view health trends, and let families stay connected — all from one platform.
+          </p>
+          <div className="grid md:grid-cols-3 gap-6 text-left mb-8">
+            {[
+              { title: "Admin Control Panel", desc: "Create patients, assign caregivers, manage your entire team and monitor company-wide performance." },
+              { title: "Shift Tracking", desc: "Caregivers clock in and out per patient. View full shift logs and hours worked across your team." },
+              { title: "Family Dashboards", desc: "Give families real-time health trends, visit history, and medication adherence reports — controlled by you." },
+            ].map((f) => (
+              <div key={f.title} className="bg-white/15 rounded-2xl p-5">
+                <h3 className="font-bold text-white mb-2">{f.title}</h3>
+                <p className="text-white/75 text-sm">{f.desc}</p>
+              </div>
+            ))}
+          </div>
+          <Link
+            href="/register-company"
+            className="inline-block px-8 py-4 bg-white text-[#2f5f9f] text-lg font-bold rounded-xl hover:bg-[#f0f5fd] transition-colors shadow-[0_8px_20px_rgba(0,0,0,0.15)]"
+          >
+            Register Your Company
+          </Link>
         </section>
 
         <section className="mt-20 text-center">
