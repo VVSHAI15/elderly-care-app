@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import prisma from "@/lib/db";
+import { sendNotification } from "@/lib/notifications";
 
 // Only available in development - creates test data
 export async function POST(request: NextRequest) {
@@ -9,7 +10,8 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const { action } = await request.json();
+    const body = await request.json();
+    const { action } = body;
 
     if (action === "createTestUsers") {
       const hashedPassword = await bcrypt.hash("password123", 12);
@@ -185,6 +187,24 @@ export async function POST(request: NextRequest) {
       await prisma.user.deleteMany();
 
       return NextResponse.json({ message: "All data cleared" });
+    }
+
+    if (action === "sendTestEmail") {
+      const targetEmail = body.email || process.env.EMAIL_USER;
+
+      const user = await prisma.user.findFirst({ where: { email: targetEmail } });
+      if (!user) {
+        return NextResponse.json({ error: `No user found with email: ${targetEmail}. Register an account with that email first.` }, { status: 400 });
+      }
+
+      await sendNotification({
+        userId: user.id,
+        type: "SYSTEM",
+        title: "Test Email from guardian.ai",
+        message: "If you received this, email notifications are working correctly!",
+      });
+
+      return NextResponse.json({ message: `Test email sent to ${targetEmail}` });
     }
 
     return NextResponse.json({ error: "Unknown action" }, { status: 400 });

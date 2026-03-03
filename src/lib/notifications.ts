@@ -1,15 +1,21 @@
-import { Resend } from "resend";
+import nodemailer from "nodemailer";
 import { pusherServer, getFamilyChannel, PUSHER_EVENTS } from "./pusher";
 import prisma from "./db";
 
 // Lazy initialization to avoid build-time errors
-let resend: Resend | null = null;
+let transporter: nodemailer.Transporter | null = null;
 
-function getResendClient(): Resend | null {
-  if (!resend && process.env.RESEND_API_KEY) {
-    resend = new Resend(process.env.RESEND_API_KEY);
+function getEmailTransporter(): nodemailer.Transporter | null {
+  if (!transporter && process.env.EMAIL_USER && process.env.EMAIL_PASS) {
+    transporter = nodemailer.createTransport({
+      service: "gmail",
+      auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASS,
+      },
+    });
   }
-  return resend;
+  return transporter;
 }
 
 interface NotificationPayload {
@@ -55,11 +61,11 @@ export async function sendNotification(payload: NotificationPayload) {
   });
 
   // Send email notification
-  const emailClient = getResendClient();
-  if (notification.user.email && emailClient) {
+  const emailTransporter = getEmailTransporter();
+  if (notification.user.email && emailTransporter) {
     try {
-      await emailClient.emails.send({
-        from: "guardian.ai <notifications@carecheck.app>",
+      await emailTransporter.sendMail({
+        from: `"guardian.ai" <${process.env.EMAIL_USER}>`,
         to: notification.user.email,
         subject: title,
         html: `
