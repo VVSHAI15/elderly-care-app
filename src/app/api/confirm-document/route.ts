@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
 import { updatePatientCareProfile } from "@/lib/care-profile-update";
+import { createTasksFromCareProfile } from "@/lib/care-profile-tasks";
+import { getAllAllergyConflicts } from "@/lib/drug-allergy-check";
+import { findProtocolsForConditions } from "@/lib/condition-protocols";
+import { createTasksFromProtocol } from "@/lib/care-profile-tasks";
 
 export async function POST(request: NextRequest) {
   const body = await request.json();
@@ -16,6 +20,7 @@ export async function POST(request: NextRequest) {
     uploadedById,
     documentType = "PRESCRIPTION",
     medicalTerms = [],
+    vitals = {},
     careProfile = null,
     force = false,          // if true, skip duplicate check and save regardless
   } = body;
@@ -56,7 +61,7 @@ export async function POST(request: NextRequest) {
         fileType: fileType || "image/unknown",
         rawText: rawText || "",
         summary: summary || "",
-        processedData: { medications, pharmacy, prescriber, medicalTerms } as never,
+        processedData: { medications, pharmacy, prescriber, medicalTerms, vitals } as never,
         documentType: documentType as never,
         uploadedById: uploadedById || null,
         processedAt: new Date(),
@@ -100,9 +105,68 @@ export async function POST(request: NextRequest) {
       )
     );
 
+    // ── Save vitals as HealthMetric records ──────────────────────────────
+    let vitalsSaved = 0;
+    const VITAL_TYPE_MAP: Record<string, string> = {
+      blood_pressure: "Blood Pressure",
+      heart_rate: "Heart Rate",
+      temperature: "Temperature",
+      oxygen_saturation: "Oxygen Saturation",
+      blood_glucose: "Blood Glucose",
+      weight: "Weight",
+      height: "Height",
+      bmi: "BMI",
+      hba1c: "HbA1c",
+      cholesterol_total: "Total Cholesterol",
+      cholesterol_ldl: "LDL Cholesterol",
+      cholesterol_hdl: "HDL Cholesterol",
+      triglycerides: "Triglycerides",
+      creatinine: "Creatinine",
+      egfr: "eGFR",
+      sodium: "Sodium",
+      potassium: "Potassium",
+      pain_scale: "Pain Scale",
+      respiratory_rate: "Respiratory Rate",
+    };
+
+    if (vitals && typeof vitals === "object" && Object.keys(vitals).length > 0) {
+      const vitalEntries = Object.entries(vitals as Record<string, string>).filter(([, v]) => v && String(v).trim());
+      for (const [key, rawValue] of vitalEntries) {
+        const typeLabel = VITAL_TYPE_MAP[key] || key.replace(/_/g, " ");
+        // Parse value and unit: e.g. "128/82 mmHg" → value="128/82", unit="mmHg"
+        const valueStr = String(rawValue).trim();
+        const unitMatch = valueStr.match(/^([\d\/.<>~\s.]+)\s*([a-zA-Z%°\/²³]+.*)?$/);
+        const value = unitMatch ? unitMatch[1].trim() : valueStr;
+        const unit = unitMatch?.[2]?.trim() || "";
+
+        try {
+          await prisma.healthMetric.create({
+            data: {
+              patientId,
+              type: typeLabel,
+              value,
+              unit: unit || null,
+              sourceDocumentId: document.id,
+              recordedById: uploadedById || null,
+              notes: `Extracted from document: ${fileName}`,
+              recordedAt: new Date(),
+            },
+          });
+          vitalsSaved++;
+        } catch (err) {
+          console.error(`Failed to save vital ${typeLabel}:`, err);
+        }
+      }
+      console.log(`Vitals: saved ${vitalsSaved} health metrics from document.`);
+    }
+
     // ── Save care profile fields ────────────────────────────────────────────
     let careProfileSavedFields = 0;
     let careProfileError: string | null = null;
+    let exerciseTasks = 0;
+    let appointmentTasks = 0;
+    let protocolTasksCreated = 0;
+    const protocolsApplied: string[] = [];
 
     if (careProfile && typeof careProfile === "object" && Object.keys(careProfile).length > 0) {
       try {
@@ -157,6 +221,28 @@ export async function POST(request: NextRequest) {
         if (careProfileSavedFields > 0) {
           await updatePatientCareProfile(patientId, updateData);
           console.log("Care profile saved successfully via raw SQL.");
+
+          // ── Auto-create tasks from exercise guidelines and appointments ──
+          const taskResult = await createTasksFromCareProfile(patientId, updateData);
+          exerciseTasks = taskResult.exerciseTasks;
+          appointmentTasks = taskResult.appointmentTasks;
+
+          // ── Auto-apply condition protocols if conditions were found ──
+          if (conditions && Array.isArray((conditions as { items: unknown[] }).items)) {
+            const conditionNames = (conditions as { items: { name: string }[] }).items.map((c) => c.name);
+            const protocols = findProtocolsForConditions(conditionNames);
+            for (const protocol of protocols) {
+              try {
+                const created = await createTasksFromProtocol(patientId, protocol);
+                if (created > 0) {
+                  protocolTasksCreated += created;
+                  protocolsApplied.push(protocol.name);
+                }
+              } catch (err) {
+                console.error(`Failed to apply protocol ${protocol.name}:`, err);
+              }
+            }
+          }
         }
       } catch (err) {
         console.error("Failed to save care profile:", err);
@@ -168,11 +254,48 @@ export async function POST(request: NextRequest) {
     }
     // ───────────────────────────────────────────────────────────────────────
 
+    // ── Allergy conflict check against newly added medications ──────────────
+    let allergyConflicts: Array<{ allergen: string; medication: string; reason: string; severity: string }> = [];
+    if (createdMedications.length > 0) {
+      try {
+        // Fetch patient's current allergies (provider-aware placeholder)
+        const isPostgres = /^(postgresql|postgres):/i.test(process.env.DATABASE_URL ?? "");
+        const patientRecord = await prisma.$queryRawUnsafe<Array<{ allergies: string | null }>>(
+          isPostgres
+            ? `SELECT "allergies" FROM "Patient" WHERE "id" = $1`
+            : `SELECT "allergies" FROM "Patient" WHERE "id" = ?`,
+          patientId
+        );
+        const allergyData = patientRecord[0]?.allergies;
+        if (allergyData) {
+          const parsedAllergies = typeof allergyData === "string" ? JSON.parse(allergyData) : allergyData;
+          const allergyList = Array.isArray(parsedAllergies?.items) ? parsedAllergies.items : [];
+          if (allergyList.length > 0) {
+            allergyConflicts = getAllAllergyConflicts(
+              createdMedications.map((m) => ({ name: m.name })),
+              allergyList
+            );
+          }
+        }
+      } catch (err) {
+        console.error("Allergy conflict check failed:", err);
+      }
+    }
+    // ────────────────────────────────────────────────────────────────────────
+
     return NextResponse.json({
       document,
       medications: createdMedications,
+      vitalsSaved,
       careProfileSaved: careProfileSavedFields > 0,
       careProfileFields: careProfileSavedFields,
+      tasksCreated: {
+        exercise: exerciseTasks,
+        appointments: appointmentTasks,
+        protocols: protocolTasksCreated,
+      },
+      ...(protocolsApplied.length > 0 && { protocolsApplied }),
+      ...(allergyConflicts.length > 0 && { allergyConflicts }),
       ...(careProfileError && { careProfileError }),
     }, { status: 201 });
 

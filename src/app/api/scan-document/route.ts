@@ -24,7 +24,29 @@ Return a JSON object with these fields:
    - explanation: plain-language explanation (1-2 sentences, no jargon, as if explaining to a grandparent)
    Aim for 5-15 terms. Return empty array if none.
 
-8. "careProfile": object with all care profile information found in the document. Include only fields that are actually present. All fields are optional:
+8. "vitals": object with any vital signs or lab values found in the document. Include only values that are explicitly present:
+   - "blood_pressure": string (e.g. "128/82 mmHg")
+   - "heart_rate": string (e.g. "72 bpm")
+   - "temperature": string (e.g. "98.6°F")
+   - "oxygen_saturation": string (e.g. "97%")
+   - "blood_glucose": string (e.g. "134 mg/dL")
+   - "weight": string (e.g. "182 lbs")
+   - "height": string (e.g. "5'10\"")
+   - "bmi": string (e.g. "26.1")
+   - "hba1c": string (e.g. "7.2%")
+   - "cholesterol_total": string (e.g. "210 mg/dL")
+   - "cholesterol_ldl": string (e.g. "130 mg/dL")
+   - "cholesterol_hdl": string (e.g. "55 mg/dL")
+   - "triglycerides": string (e.g. "140 mg/dL")
+   - "creatinine": string (e.g. "1.1 mg/dL")
+   - "egfr": string (e.g. "72 mL/min/1.73m²")
+   - "sodium": string (e.g. "139 mEq/L")
+   - "potassium": string (e.g. "4.2 mEq/L")
+   - "pain_scale": string (e.g. "4/10")
+   - "respiratory_rate": string (e.g. "16 breaths/min")
+   Return empty object {} if no vitals are present in the document.
+
+9. "careProfile": object with all care profile information found in the document. Include only fields that are actually present. All fields are optional:
    - "dischargeInfo": { hospital, diagnosis, mrn, admissionDate, dischargeDate, attendingPhysician, followUpPhysician }
    - "warningSigns": {
        "emergency": array of strings — symptoms requiring 911 (e.g. "Sudden severe chest pain"),
@@ -44,7 +66,7 @@ Return a JSON object with these fields:
    - "healthHistory": { "items": array of { event: string, date?: string, notes?: string } — surgeries, hospitalizations, procedures }
    - "illnessHistory": { "items": array of { illness: string, date?: string, notes?: string } }
 
-If the document is a discharge summary, focus on extracting the full careProfile. If it is a simple prescription, careProfile may be empty or minimal.
+If the document is a discharge summary, focus on extracting the full careProfile. If it is a simple prescription, careProfile may be empty or minimal. Always extract vitals if present anywhere in the document.
 
 Return ONLY valid JSON, no other text.`;
 
@@ -161,6 +183,7 @@ export async function POST(request: NextRequest) {
       summary: parsedResult.summary || "",
       rawText: parsedResult.rawText,
       medicalTerms: parsedResult.medicalTerms || [],
+      vitals: parsedResult.vitals || {},
       careProfile: parsedResult.careProfile || null,
     });
   } catch (error) {

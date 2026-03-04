@@ -415,6 +415,13 @@ export default function DashboardPage() {
                   </p>
                   <DocumentScanner
                     patientId={currentPatientId}
+                    patientAllergies={
+                      patient?.allergies
+                        ? (Array.isArray((patient.allergies as { items?: unknown[] })?.items ?? null)
+                            ? (patient.allergies as { items: { substance: string; reaction?: string; severity?: string }[] }).items
+                            : [])
+                        : []
+                    }
                     onScanComplete={() => {
                       setTaskListKey((k) => k + 1);
                       setMedicationsKey((k) => k + 1);
@@ -495,6 +502,7 @@ export default function DashboardPage() {
                     Allergies, conditions, medications, health history, warning signs, and more.
                   </p>
                   <CareProfileView
+                    patientId={currentPatientId}
                     dischargeInfo={patient?.dischargeInfo}
                     exerciseGuidelines={patient?.exerciseGuidelines}
                     dietRestrictions={patient?.dietRestrictions}
@@ -507,6 +515,7 @@ export default function DashboardPage() {
                     illnessHistory={patient?.illnessHistory}
                     medications={patient?.medications}
                     onEdit={() => setShowEditCareProfile(true)}
+                    onTasksCreated={() => setTaskListKey((k) => k + 1)}
                   />
                   {showEditCareProfile && patient && (
                     <EditCareProfileModal

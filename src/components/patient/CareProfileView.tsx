@@ -1,6 +1,7 @@
 "use client";
 
-import { AlertTriangle, Phone, Calendar, Activity, Utensils, FileText, Pencil, ShieldAlert, Heart, Clock, Pill } from "lucide-react";
+import { useState } from "react";
+import { AlertTriangle, Phone, Calendar, Activity, Utensils, FileText, Pencil, ShieldAlert, Heart, Clock, Pill, Sparkles, Loader2, CheckCircle } from "lucide-react";
 import type {
   CareProfile,
   DischargeInfo,
@@ -14,6 +15,8 @@ import type {
   HealthHistory,
   IllnessHistory,
 } from "@/types/care-profile";
+import { getAllAllergyConflicts, type AllergyConflict } from "@/lib/drug-allergy-check";
+import { findProtocolsForConditions, type ConditionProtocol } from "@/lib/condition-protocols";
 
 interface MedicationSummary {
   id: string;
@@ -25,7 +28,9 @@ interface MedicationSummary {
 
 interface Props extends CareProfile {
   medications?: MedicationSummary[];
+  patientId?: string;
   onEdit?: () => void;
+  onTasksCreated?: () => void;
 }
 
 const PRIORITY_STYLES: Record<string, string> = {
@@ -59,8 +64,12 @@ export function CareProfileView({
   healthHistory,
   illnessHistory,
   medications,
+  patientId,
   onEdit,
+  onTasksCreated,
 }: Props) {
+  const [applyingProtocol, setApplyingProtocol] = useState<string | null>(null);
+  const [appliedProtocols, setAppliedProtocols] = useState<Set<string>>(new Set());
   const di = dischargeInfo as DischargeInfo | null | undefined;
   const eg = exerciseGuidelines as ExerciseGuidelines | null | undefined;
   const dr = dietRestrictions as DietRestrictions | null | undefined;
@@ -71,6 +80,37 @@ export function CareProfileView({
   const co = conditions as ConditionList | null | undefined;
   const hh = healthHistory as HealthHistory | null | undefined;
   const ih = illnessHistory as IllnessHistory | null | undefined;
+
+  // Compute drug-allergy conflicts from current medications + allergies
+  const allergyList = al?.items ?? [];
+  const medList = medications ?? [];
+  const allergyConflicts: AllergyConflict[] = allergyList.length > 0 && medList.length > 0
+    ? getAllAllergyConflicts(medList.map((m) => ({ name: m.name })), allergyList)
+    : [];
+
+  // Find matching care protocols for current conditions
+  const conditionNames = co?.items?.map((c) => c.name) ?? [];
+  const matchingProtocols: ConditionProtocol[] = conditionNames.length > 0
+    ? findProtocolsForConditions(conditionNames)
+    : [];
+
+  const handleApplyProtocol = async (protocolId: string, protocolName: string) => {
+    if (!patientId || applyingProtocol) return;
+    setApplyingProtocol(protocolId);
+    try {
+      const res = await fetch("/api/care-plans/apply", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ patientId, protocolId }),
+      });
+      if (res.ok) {
+        setAppliedProtocols((prev) => new Set([...prev, protocolId]));
+        onTasksCreated?.();
+      }
+    } catch { /* silent */ } finally {
+      setApplyingProtocol(null);
+    }
+  };
 
   const hasMeds = medications && medications.length > 0;
   const hasData =
@@ -115,6 +155,79 @@ export function CareProfileView({
             <Pencil className="w-3.5 h-3.5" />
             Edit Care Profile
           </button>
+        </div>
+      )}
+
+      {/* Drug-Allergy Conflict Alerts */}
+      {allergyConflicts.length > 0 && (
+        <div className="bg-red-50 border-2 border-red-400 rounded-2xl p-5 space-y-3">
+          <div className="flex items-start gap-2">
+            <ShieldAlert className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+            <div>
+              <h3 className="font-bold text-red-800">⚠️ Medication-Allergy Conflicts</h3>
+              <p className="text-sm text-red-700">The patient has known allergies that may conflict with current medications. Contact the prescribing physician.</p>
+            </div>
+          </div>
+          <div className="space-y-2">
+            {allergyConflicts.map((c, i) => (
+              <div key={i} className="bg-white border border-red-200 rounded-xl p-3">
+                <div className="flex items-center gap-2 flex-wrap mb-1">
+                  <span className={`text-xs font-bold px-2 py-0.5 rounded-lg ${c.severity === "CRITICAL" ? "bg-red-600 text-white" : c.severity === "HIGH" ? "bg-orange-500 text-white" : "bg-amber-400 text-white"}`}>
+                    {c.severity}
+                  </span>
+                  <span className="text-sm font-bold text-red-900">{c.medication}</span>
+                  <span className="text-xs text-red-600">conflicts with</span>
+                  <span className="text-sm font-bold text-red-900">{c.allergen}</span>
+                </div>
+                <p className="text-xs text-gray-600">{c.reason}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Matching Care Protocols */}
+      {matchingProtocols.length > 0 && patientId && (
+        <div className="bg-blue-50 border-2 border-blue-200 rounded-2xl p-5 space-y-3">
+          <div className="flex items-start gap-2">
+            <Sparkles className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
+            <div>
+              <h3 className="font-bold text-blue-900">Care Plans Available</h3>
+              <p className="text-sm text-blue-700">Based on this patient&apos;s conditions, the following evidence-based care plans can auto-generate tasks:</p>
+            </div>
+          </div>
+          <div className="space-y-2">
+            {matchingProtocols.map((protocol) => {
+              const isApplied = appliedProtocols.has(protocol.id);
+              const isApplying = applyingProtocol === protocol.id;
+              return (
+                <div key={protocol.id} className="bg-white border border-blue-200 rounded-xl p-3 flex items-start justify-between gap-3">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-bold text-blue-900">{protocol.name}</p>
+                    <p className="text-xs text-gray-600 mt-0.5">{protocol.description.slice(0, 100)}{protocol.description.length > 100 ? "…" : ""}</p>
+                    <p className="text-xs text-blue-600 mt-1">{protocol.tasks.length} tasks included</p>
+                  </div>
+                  <button
+                    onClick={() => handleApplyProtocol(protocol.id, protocol.name)}
+                    disabled={isApplied || !!applyingProtocol}
+                    className={`flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${
+                      isApplied
+                        ? "bg-green-100 text-green-700 border border-green-200 cursor-default"
+                        : "bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
+                    }`}
+                  >
+                    {isApplied ? (
+                      <><CheckCircle className="w-3.5 h-3.5" /> Applied</>
+                    ) : isApplying ? (
+                      <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Applying…</>
+                    ) : (
+                      <>Apply Care Plan</>
+                    )}
+                  </button>
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
 

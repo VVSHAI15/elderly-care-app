@@ -17,7 +17,11 @@ import {
   Save,
   Trash2,
   BookOpen,
+  Activity,
+  ShieldAlert,
+  ListTodo,
 } from "lucide-react";
+import { checkMedicationAgainstAllergies, type AllergyConflict } from "@/lib/drug-allergy-check";
 
 interface ExtractedMedication {
   name: string;
@@ -100,6 +104,7 @@ interface ScanResult {
   summary?: string;
   rawText?: string;
   medicalTerms?: { term: string; explanation: string }[];
+  vitals?: Record<string, string>;
   careProfile?: CareProfileExtract | null;
 }
 
@@ -112,10 +117,21 @@ interface ConfirmedResult {
   careProfileSaved?: boolean;
   careProfileFields?: number;
   careProfileError?: string;
+  vitalsSaved?: number;
+  tasksCreated?: { exercise: number; appointments: number; protocols: number };
+  protocolsApplied?: string[];
+  allergyConflicts?: AllergyConflict[];
+}
+
+interface PatientAllergy {
+  substance: string;
+  reaction?: string;
+  severity?: string;
 }
 
 interface DocumentScannerProps {
   patientId: string;
+  patientAllergies?: PatientAllergy[];
   onScanComplete?: (result: ConfirmedResult) => void;
 }
 
@@ -181,7 +197,7 @@ function ProgressBar({ stage }: { stage: UploadStage }) {
   );
 }
 
-export function DocumentScanner({ patientId, onScanComplete }: DocumentScannerProps) {
+export function DocumentScanner({ patientId, patientAllergies, onScanComplete }: DocumentScannerProps) {
   const { data: session } = useSession();
   const [isProcessing, setIsProcessing] = useState(false);
   const [uploadStage, setUploadStage] = useState<UploadStage>(0);
@@ -189,7 +205,15 @@ export function DocumentScanner({ patientId, onScanComplete }: DocumentScannerPr
   const [error, setError] = useState<string | null>(null);
   const [isConfirming, setIsConfirming] = useState(false);
   const [confirmed, setConfirmed] = useState(false);
-  const [confirmedInfo, setConfirmedInfo] = useState<{ careProfileSaved: boolean; careProfileFields: number; careProfileError?: string } | null>(null);
+  const [confirmedInfo, setConfirmedInfo] = useState<{
+    careProfileSaved: boolean;
+    careProfileFields: number;
+    careProfileError?: string;
+    vitalsSaved?: number;
+    tasksCreated?: { exercise: number; appointments: number; protocols: number };
+    protocolsApplied?: string[];
+    allergyConflicts?: AllergyConflict[];
+  } | null>(null);
   const [isDuplicate, setIsDuplicate] = useState(false);
   const [duplicateDate, setDuplicateDate] = useState<string | null>(null);
 
@@ -199,6 +223,8 @@ export function DocumentScanner({ patientId, onScanComplete }: DocumentScannerPr
   const [editPrescriber, setEditPrescriber] = useState("");
   const [documentType, setDocumentType] = useState("PRESCRIPTION");
   const [medConflicts, setMedConflicts] = useState<MedConflict[]>([]);
+  // Pre-confirm allergy conflict warnings (client-side check)
+  const [allergyWarnings, setAllergyWarnings] = useState<AllergyConflict[]>([]);
 
   const onDrop = useCallback(
     async (acceptedFiles: File[]) => {
@@ -210,6 +236,7 @@ export function DocumentScanner({ patientId, onScanComplete }: DocumentScannerPr
       setScanResult(null);
       setConfirmed(false);
       setMedConflicts([]);
+      setAllergyWarnings([]);
       setUploadStage(1);
 
       try {
@@ -260,6 +287,24 @@ export function DocumentScanner({ patientId, onScanComplete }: DocumentScannerPr
               setMedConflicts(conflicts);
             }
           } catch { /* ignore — medication conflict check is non-fatal */ }
+
+          // Client-side allergy conflict check (pre-confirm)
+          if (patientAllergies && patientAllergies.length > 0) {
+            const warnings: AllergyConflict[] = [];
+            for (const med of extractedMeds) {
+              const conflicts = checkMedicationAgainstAllergies(med.name, patientAllergies);
+              warnings.push(...conflicts);
+            }
+            // Deduplicate
+            const seen = new Set<string>();
+            const unique = warnings.filter((w) => {
+              const key = `${w.allergen}::${w.medication}`;
+              if (seen.has(key)) return false;
+              seen.add(key);
+              return true;
+            });
+            setAllergyWarnings(unique);
+          }
         }
       } catch (err) {
         setError(err instanceof Error ? err.message : "An error occurred");
@@ -325,6 +370,7 @@ export function DocumentScanner({ patientId, onScanComplete }: DocumentScannerPr
           uploadedById: session?.user?.id || null,
           documentType,
           medicalTerms: scanResult.medicalTerms || [],
+          vitals: scanResult.vitals || {},
           careProfile: scanResult.careProfile || null,
           force,   // server skips duplicate check when true
         }),
@@ -346,6 +392,10 @@ export function DocumentScanner({ patientId, onScanComplete }: DocumentScannerPr
         careProfileSaved: !!data.careProfileSaved,
         careProfileFields: data.careProfileFields ?? 0,
         careProfileError: data.careProfileError,
+        vitalsSaved: data.vitalsSaved ?? 0,
+        tasksCreated: data.tasksCreated,
+        protocolsApplied: data.protocolsApplied,
+        allergyConflicts: data.allergyConflicts,
       });
       setConfirmed(true);
       onScanComplete?.(data);
@@ -369,6 +419,7 @@ export function DocumentScanner({ patientId, onScanComplete }: DocumentScannerPr
     setIsDuplicate(false);
     setDuplicateDate(null);
     setMedConflicts([]);
+    setAllergyWarnings([]);
   };
 
   const updateMedication = (index: number, field: keyof ExtractedMedication, value: string) => {
@@ -482,29 +533,95 @@ export function DocumentScanner({ patientId, onScanComplete }: DocumentScannerPr
 
       {/* Confirmed success */}
       {confirmed && (
-        <div className="bg-green-50 border-2 border-green-200 rounded-2xl p-8 text-center space-y-4">
-          <CheckCircle className="w-16 h-16 text-green-500 mx-auto" />
-          <p className="font-bold text-green-800 text-xl">Document Saved Successfully</p>
-          {confirmedInfo?.careProfileSaved ? (
-            <p className="text-base text-green-700">
-              Saved {confirmedInfo.careProfileFields} care profile section{confirmedInfo.careProfileFields !== 1 ? "s" : ""} — check the Care Profile tab to review.
-            </p>
-          ) : confirmedInfo?.careProfileError ? (
-            <p className="text-base text-amber-700">
-              Document saved, but care profile could not be updated: {confirmedInfo.careProfileError}
-            </p>
-          ) : (
-            <p className="text-base text-green-700">
-              Medications and tasks saved. No care profile data was detected in this document.
-            </p>
+        <div className="space-y-4">
+          {/* Allergy conflicts from server — shown prominently FIRST */}
+          {confirmedInfo?.allergyConflicts && confirmedInfo.allergyConflicts.length > 0 && (
+            <div className="bg-red-50 border-2 border-red-400 rounded-2xl p-5 space-y-3">
+              <div className="flex items-start gap-3">
+                <ShieldAlert className="w-6 h-6 text-red-600 flex-shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-bold text-red-800 text-base">
+                    ⚠️ Allergy Conflict Detected!
+                  </p>
+                  <p className="text-sm text-red-700">
+                    The following medications may conflict with the patient&apos;s known allergies:
+                  </p>
+                </div>
+              </div>
+              <div className="space-y-2">
+                {confirmedInfo.allergyConflicts.map((c, i) => (
+                  <div key={i} className="bg-white border border-red-200 rounded-xl p-3">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className={`text-xs font-bold px-2 py-0.5 rounded-lg ${c.severity === "CRITICAL" ? "bg-red-600 text-white" : c.severity === "HIGH" ? "bg-orange-500 text-white" : "bg-amber-400 text-white"}`}>
+                        {c.severity}
+                      </span>
+                      <span className="text-sm font-bold text-red-900">{c.medication}</span>
+                      <span className="text-sm text-red-600">conflicts with allergy to</span>
+                      <span className="text-sm font-bold text-red-900">{c.allergen}</span>
+                    </div>
+                    <p className="text-xs text-gray-600">{c.reason}</p>
+                  </div>
+                ))}
+              </div>
+              <p className="text-xs text-red-700 font-medium">Contact the prescribing physician before administering these medications.</p>
+            </div>
           )}
-          <button
-            onClick={handleRescan}
-            className="mt-2 px-5 py-3 bg-white border-2 border-green-300 text-green-700 rounded-xl hover:bg-green-50 transition-colors text-base font-semibold flex items-center gap-2 mx-auto"
-          >
-            <Upload className="w-5 h-5" />
-            Scan Another Document
-          </button>
+
+          <div className="bg-green-50 border-2 border-green-200 rounded-2xl p-6 space-y-4">
+            <div className="flex flex-col items-center text-center gap-2">
+              <CheckCircle className="w-14 h-14 text-green-500" />
+              <p className="font-bold text-green-800 text-xl">Document Saved Successfully</p>
+            </div>
+
+            <div className="space-y-2">
+              {confirmedInfo?.careProfileSaved && (
+                <div className="flex items-center gap-2 text-green-700 text-sm">
+                  <CheckCircle className="w-4 h-4 flex-shrink-0" />
+                  <span>Saved {confirmedInfo.careProfileFields} care profile section{confirmedInfo.careProfileFields !== 1 ? "s" : ""} — check the Care Profile tab.</span>
+                </div>
+              )}
+              {confirmedInfo?.careProfileError && (
+                <div className="flex items-center gap-2 text-amber-700 text-sm">
+                  <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                  <span>Care profile error: {confirmedInfo.careProfileError}</span>
+                </div>
+              )}
+              {(confirmedInfo?.vitalsSaved ?? 0) > 0 && (
+                <div className="flex items-center gap-2 text-green-700 text-sm">
+                  <Activity className="w-4 h-4 flex-shrink-0" />
+                  <span>Saved {confirmedInfo!.vitalsSaved} vital sign{confirmedInfo!.vitalsSaved !== 1 ? "s" : ""} to health metrics.</span>
+                </div>
+              )}
+              {confirmedInfo?.tasksCreated && (confirmedInfo.tasksCreated.exercise + confirmedInfo.tasksCreated.appointments + confirmedInfo.tasksCreated.protocols) > 0 && (
+                <div className="flex items-center gap-2 text-green-700 text-sm">
+                  <ListTodo className="w-4 h-4 flex-shrink-0" />
+                  <span>
+                    Created {confirmedInfo.tasksCreated.exercise + confirmedInfo.tasksCreated.appointments + confirmedInfo.tasksCreated.protocols} tasks
+                    {confirmedInfo.tasksCreated.exercise > 0 && ` (${confirmedInfo.tasksCreated.exercise} exercise)`}
+                    {confirmedInfo.tasksCreated.appointments > 0 && ` (${confirmedInfo.tasksCreated.appointments} appointment)`}
+                    {confirmedInfo.tasksCreated.protocols > 0 && ` (${confirmedInfo.tasksCreated.protocols} care plan)`}.
+                  </span>
+                </div>
+              )}
+              {confirmedInfo?.protocolsApplied && confirmedInfo.protocolsApplied.length > 0 && (
+                <div className="flex items-start gap-2 text-blue-700 text-sm">
+                  <Sparkles className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                  <span>Auto-applied care plans: {confirmedInfo.protocolsApplied.join(", ")}.</span>
+                </div>
+              )}
+              {!confirmedInfo?.careProfileSaved && !confirmedInfo?.careProfileError && (
+                <p className="text-sm text-green-700">Medications and tasks saved. No care profile data detected.</p>
+              )}
+            </div>
+
+            <button
+              onClick={handleRescan}
+              className="w-full px-5 py-3 bg-white border-2 border-green-300 text-green-700 rounded-xl hover:bg-green-50 transition-colors text-base font-semibold flex items-center justify-center gap-2"
+            >
+              <Upload className="w-5 h-5" />
+              Scan Another Document
+            </button>
+          </div>
         </div>
       )}
 
@@ -628,6 +745,65 @@ export function DocumentScanner({ patientId, onScanComplete }: DocumentScannerPr
                       {cp.careContacts.length} Care Contact{cp.careContacts.length !== 1 ? "s" : ""}
                     </span>
                   )}
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* Pre-confirm Allergy Conflict Warnings */}
+          {allergyWarnings.length > 0 && (
+            <div className="bg-red-50 border-2 border-red-400 rounded-2xl p-4 space-y-3">
+              <div className="flex items-start gap-3">
+                <ShieldAlert className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-bold text-red-800 text-base">Allergy Alert — Review Before Confirming</p>
+                  <p className="text-sm text-red-700">Medications in this document may conflict with the patient&apos;s known allergies:</p>
+                </div>
+              </div>
+              <div className="space-y-2">
+                {allergyWarnings.map((w, i) => (
+                  <div key={i} className="bg-white border border-red-200 rounded-xl p-3">
+                    <div className="flex items-center gap-2 flex-wrap mb-1">
+                      <span className={`text-xs font-bold px-2 py-0.5 rounded-lg ${w.severity === "CRITICAL" ? "bg-red-600 text-white" : w.severity === "HIGH" ? "bg-orange-500 text-white" : "bg-amber-400 text-white"}`}>
+                        {w.severity}
+                      </span>
+                      <span className="text-sm font-bold text-red-900">{w.medication}</span>
+                      <span className="text-sm text-red-600">→ allergy:</span>
+                      <span className="text-sm font-bold text-red-900">{w.allergen}</span>
+                    </div>
+                    <p className="text-xs text-gray-600">{w.reason}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Vitals Preview */}
+          {scanResult.vitals && Object.keys(scanResult.vitals).length > 0 && (() => {
+            const vitalEntries = Object.entries(scanResult.vitals!).filter(([, v]) => v);
+            const VITAL_LABELS: Record<string, string> = {
+              blood_pressure: "Blood Pressure", heart_rate: "Heart Rate", temperature: "Temperature",
+              oxygen_saturation: "O₂ Saturation", blood_glucose: "Blood Glucose", weight: "Weight",
+              height: "Height", bmi: "BMI", hba1c: "HbA1c", cholesterol_total: "Cholesterol (Total)",
+              cholesterol_ldl: "LDL", cholesterol_hdl: "HDL", triglycerides: "Triglycerides",
+              creatinine: "Creatinine", egfr: "eGFR", sodium: "Sodium", potassium: "Potassium",
+              pain_scale: "Pain Scale", respiratory_rate: "Resp. Rate",
+            };
+            if (!vitalEntries.length) return null;
+            return (
+              <div className="bg-teal-50 border-2 border-teal-200 rounded-2xl p-4 space-y-3">
+                <div className="flex items-center gap-2">
+                  <Activity className="w-5 h-5 text-teal-600" />
+                  <p className="font-bold text-teal-800 text-base">Vital Signs Detected ({vitalEntries.length})</p>
+                </div>
+                <p className="text-xs text-teal-600">These will be saved as health metrics when you confirm.</p>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                  {vitalEntries.map(([key, val]) => (
+                    <div key={key} className="bg-white border border-teal-100 rounded-xl p-2.5 text-center">
+                      <p className="text-xs text-gray-500 font-medium">{VITAL_LABELS[key] || key.replace(/_/g, " ")}</p>
+                      <p className="text-sm font-bold text-teal-900 mt-0.5">{val}</p>
+                    </div>
+                  ))}
                 </div>
               </div>
             );
