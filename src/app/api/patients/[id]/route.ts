@@ -38,11 +38,17 @@ export async function GET(
       return NextResponse.json({ error: "Patient not found" }, { status: 404 });
     }
 
-    // Check if user is the patient or a connected family member
+    // Check if user is the patient, a connected family/caregiver member, or an org admin/caregiver
     const isOwner = patient.userId === session.user.id;
     const isConnected = patient.familyMembers.some((f) => f.id === session.user.id);
+    const isAdmin = session.user.role === "ADMIN";
+    // Org caregiver/admin can access patients in their org
+    const isOrgMember =
+      (session.user.role === "CAREGIVER" || session.user.role === "ADMIN") &&
+      session.user.organizationId &&
+      (patient as unknown as { organizationId?: string | null }).organizationId === session.user.organizationId;
 
-    if (!isOwner && !isConnected) {
+    if (!isOwner && !isConnected && !isAdmin && !isOrgMember) {
       return NextResponse.json({ error: "Access denied" }, { status: 403 });
     }
 

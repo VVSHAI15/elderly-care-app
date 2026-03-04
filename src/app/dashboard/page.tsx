@@ -67,6 +67,8 @@ export default function DashboardPage() {
   const [taskListKey, setTaskListKey] = useState(0);
   const [medicationsKey, setMedicationsKey] = useState(0);
   const [viewingPatientDetail, setViewingPatientDetail] = useState(false);
+  const [patientLoading, setPatientLoading] = useState(false);
+  const [patientError, setPatientError] = useState<string | null>(null);
   const [showEditCareProfile, setShowEditCareProfile] = useState(false);
 
   const fetchConnections = useCallback(async () => {
@@ -143,17 +145,29 @@ export default function DashboardPage() {
   }, [loading]);
 
   const handleSelectPatient = async (patientId: string) => {
+    // Switch to detail view immediately; keep any previously loaded patient
+    // data visible until new data arrives (prevents blank flicker).
     setSelectedPatientId(patientId);
     setViewingPatientDetail(true);
+    setPatient(null);
+    setActiveTab("tasks");
+    setPatientError(null);
+    setPatientLoading(true);
     try {
       const response = await fetch(`/api/patients/${patientId}`);
       if (response.ok) {
         const data = await response.json();
         setPatient(data);
-        setActiveTab("tasks");
+      } else if (response.status === 403) {
+        setPatientError("You don't have permission to view this patient.");
+      } else {
+        setPatientError("Failed to load patient data. Please try again.");
       }
     } catch (error) {
       console.error("Failed to fetch patient:", error);
+      setPatientError("Network error. Please check your connection and try again.");
+    } finally {
+      setPatientLoading(false);
     }
   };
 
@@ -161,6 +175,8 @@ export default function DashboardPage() {
     setViewingPatientDetail(false);
     setSelectedPatientId(null);
     setPatient(null);
+    setPatientError(null);
+    setPatientLoading(false);
   };
 
   const refreshPatient = async (patientId: string) => {
@@ -331,6 +347,21 @@ export default function DashboardPage() {
                   </button>
                 </>
               )}
+              {/* Care Profile — visible to everyone with a patient context */}
+              {currentPatientId && (
+                <button
+                  onClick={() => setActiveTab("care-profile")}
+                  className={`px-5 py-3 rounded-xl font-semibold text-base transition-colors flex items-center gap-2 ${
+                    activeTab === "care-profile"
+                      ? "bg-[#2f5f9f] text-white shadow-[0_10px_20px_rgba(47,95,159,0.30)] ring-2 ring-[#9cbbe2]"
+                      : "bg-white text-gray-800 hover:bg-[#eff5ff] border-2 border-[#d6e2f1]"
+                  }`}
+                >
+                  <FileText className="w-5 h-5" />
+                  Care Profile
+                </button>
+              )}
+              {/* Caregiver-only tabs */}
               {isCaregiver && currentPatientId && (
                 <>
                   <button
@@ -355,17 +386,6 @@ export default function DashboardPage() {
                     <Activity className="w-5 h-5" />
                     Vitals
                   </button>
-                  <button
-                    onClick={() => setActiveTab("care-profile")}
-                    className={`px-5 py-3 rounded-xl font-semibold text-base transition-colors flex items-center gap-2 ${
-                      activeTab === "care-profile"
-                        ? "bg-[#2f5f9f] text-white shadow-[0_10px_20px_rgba(47,95,159,0.30)] ring-2 ring-[#9cbbe2]"
-                        : "bg-white text-gray-800 hover:bg-[#eff5ff] border-2 border-[#d6e2f1]"
-                    }`}
-                  >
-                    <FileText className="w-5 h-5" />
-                    Care Profile
-                  </button>
                 </>
               )}
               <button
@@ -383,7 +403,25 @@ export default function DashboardPage() {
 
             {/* Tab Content */}
             <div className="bg-white/95 rounded-2xl shadow-[0_18px_42px_rgba(25,48,88,0.10)] border border-[#d8e2f1] p-8">
-              {activeTab === "tasks" && currentPatientId && (
+              {/* Patient detail loading / error state */}
+              {patientLoading && (
+                <div className="flex items-center justify-center py-16">
+                  <Loader2 className="w-8 h-8 text-[#2f5f9f] animate-spin mr-3" />
+                  <span className="text-gray-600 font-medium">Loading patient data…</span>
+                </div>
+              )}
+              {!patientLoading && patientError && (
+                <div className="text-center py-12">
+                  <p className="text-red-600 font-semibold mb-2">{patientError}</p>
+                  <button
+                    onClick={() => currentPatientId && handleSelectPatient(currentPatientId)}
+                    className="text-[#2f5f9f] hover:underline font-medium"
+                  >
+                    Retry
+                  </button>
+                </div>
+              )}
+              {!patientLoading && !patientError && activeTab === "tasks" && currentPatientId && (
                 <div>
                   <div className="flex items-center justify-between mb-6">
                     <h2 className="text-xl font-bold text-gray-900">Tasks</h2>
@@ -396,14 +434,14 @@ export default function DashboardPage() {
                     </button>
                   </div>
                   <TaskList
-                    key={taskListKey}
+                    key={`${currentPatientId}-${taskListKey}`}
                     patientId={currentPatientId}
                     connections={connections}
                   />
                 </div>
               )}
 
-              {activeTab === "scan" && currentPatientId && (
+              {!patientLoading && !patientError && activeTab === "scan" && currentPatientId && (
                 <div>
                   <h2 className="text-xl font-bold text-gray-900 mb-4">
                     Scan Discharge Papers
@@ -414,6 +452,7 @@ export default function DashboardPage() {
                     and edit before saving.
                   </p>
                   <DocumentScanner
+                    key={currentPatientId}
                     patientId={currentPatientId}
                     patientAllergies={
                       patient?.allergies
@@ -431,7 +470,7 @@ export default function DashboardPage() {
                 </div>
               )}
 
-              {activeTab === "history" && currentPatientId && (
+              {!patientLoading && !patientError && activeTab === "history" && currentPatientId && (
                 <div>
                   <h2 className="text-xl font-bold text-gray-900 mb-4">
                     Upload History
@@ -439,16 +478,16 @@ export default function DashboardPage() {
                   <p className="text-lg text-gray-700 mb-6">
                     View all uploaded documents, who uploaded them, and their summaries.
                   </p>
-                  <UploadHistory patientId={currentPatientId} />
+                  <UploadHistory key={currentPatientId} patientId={currentPatientId} />
                 </div>
               )}
 
-              {activeTab === "medications" && currentPatientId && (
+              {!patientLoading && !patientError && activeTab === "medications" && currentPatientId && (
                 <div>
                   <h2 className="text-xl font-bold text-gray-900 mb-4">
                     Medications
                   </h2>
-                  <MedicationsList key={medicationsKey} patientId={currentPatientId} />
+                  <MedicationsList key={`${currentPatientId}-${medicationsKey}`} patientId={currentPatientId} />
                 </div>
               )}
 
@@ -478,30 +517,32 @@ export default function DashboardPage() {
                 </div>
               )}
 
-              {activeTab === "shifts" && currentPatientId && (
+              {!patientLoading && !patientError && activeTab === "shifts" && currentPatientId && (
                 <div>
                   <h2 className="text-xl font-bold text-gray-900 mb-6">Clock In / Out</h2>
                   <ClockInOut
+                    key={currentPatientId}
                     patientId={currentPatientId}
                     patientName={patient?.user?.name || null}
                   />
                 </div>
               )}
 
-              {activeTab === "vitals" && currentPatientId && (
+              {!patientLoading && !patientError && activeTab === "vitals" && currentPatientId && (
                 <div>
                   <h2 className="text-xl font-bold text-gray-900 mb-6">Health Vitals</h2>
-                  <HealthMetricLogger patientId={currentPatientId} />
+                  <HealthMetricLogger key={currentPatientId} patientId={currentPatientId} />
                 </div>
               )}
 
-              {activeTab === "care-profile" && currentPatientId && (
+              {!patientLoading && !patientError && activeTab === "care-profile" && currentPatientId && (
                 <div>
                   <h2 className="text-xl font-bold text-gray-900 mb-1">Care Profile</h2>
                   <p className="text-sm text-gray-500 mb-6">
                     Allergies, conditions, medications, health history, warning signs, and more.
                   </p>
                   <CareProfileView
+                    key={currentPatientId}
                     patientId={currentPatientId}
                     dischargeInfo={patient?.dischargeInfo}
                     exerciseGuidelines={patient?.exerciseGuidelines}
