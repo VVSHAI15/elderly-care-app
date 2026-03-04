@@ -51,9 +51,16 @@ interface Connection {
   role: string;
 }
 
+interface PatientAllergy {
+  substance: string;
+  reaction?: string;
+  severity?: string;
+}
+
 interface TaskListProps {
   patientId: string;
   connections?: Connection[];
+  patientAllergies?: PatientAllergy[];
   onTaskComplete?: (task: Task) => void;
 }
 
@@ -259,7 +266,7 @@ function CategorySection({
 }
 
 // ── Main component ────────────────────────────────────────────────────────────
-export function TaskList({ patientId, connections = [], onTaskComplete }: TaskListProps) {
+export function TaskList({ patientId, connections = [], patientAllergies = [], onTaskComplete }: TaskListProps) {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [filter, setFilter] = useState<"pending" | "completed" | "all">("pending");
@@ -467,6 +474,7 @@ export function TaskList({ patientId, connections = [], onTaskComplete }: TaskLi
           task={editingTask}
           patientId={patientId}
           connections={connections}
+          patientAllergies={patientAllergies}
           onClose={() => setEditingTask(null)}
           onTaskUpdated={() => { setEditingTask(null); fetchTasks(); }}
         />

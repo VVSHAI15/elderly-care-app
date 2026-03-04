@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
-import { X, Loader2 } from "lucide-react";
+import { useState, useEffect } from "react";
+import { X, Loader2, AlertTriangle, ShieldAlert } from "lucide-react";
+import { checkMedicationAgainstAllergies, type AllergyConflict } from "@/lib/drug-allergy-check";
 
 interface Connection {
   id: string;
@@ -10,9 +11,16 @@ interface Connection {
   role: string;
 }
 
+interface PatientAllergy {
+  substance: string;
+  reaction?: string;
+  severity?: string;
+}
+
 interface AddTaskModalProps {
   patientId: string;
   connections?: Connection[];
+  patientAllergies?: PatientAllergy[];
   onClose: () => void;
   onTaskCreated: () => void;
 }
@@ -41,7 +49,25 @@ const RECURRENCE_OPTIONS = [
   { value: "monthly", label: "Monthly" },
 ];
 
-export function AddTaskModal({ patientId, connections = [], onClose, onTaskCreated }: AddTaskModalProps) {
+const SEVERITY_STYLES: Record<string, string> = {
+  CRITICAL: "bg-red-100 border-red-400 text-red-900",
+  HIGH:     "bg-orange-100 border-orange-400 text-orange-900",
+  CAUTION:  "bg-yellow-100 border-yellow-400 text-yellow-900",
+};
+
+const SEVERITY_BADGE: Record<string, string> = {
+  CRITICAL: "bg-red-200 text-red-800",
+  HIGH:     "bg-orange-200 text-orange-800",
+  CAUTION:  "bg-yellow-200 text-yellow-800",
+};
+
+export function AddTaskModal({
+  patientId,
+  connections = [],
+  patientAllergies = [],
+  onClose,
+  onTaskCreated,
+}: AddTaskModalProps) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [category, setCategory] = useState("OTHER");
@@ -53,6 +79,17 @@ export function AddTaskModal({ patientId, connections = [], onClose, onTaskCreat
   const [assignedToId, setAssignedToId] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [allergyWarnings, setAllergyWarnings] = useState<AllergyConflict[]>([]);
+
+  // Re-run allergy check whenever title or category changes
+  useEffect(() => {
+    if (category !== "MEDICATION" || !title.trim() || patientAllergies.length === 0) {
+      setAllergyWarnings([]);
+      return;
+    }
+    const conflicts = checkMedicationAgainstAllergies(title.trim(), patientAllergies);
+    setAllergyWarnings(conflicts);
+  }, [title, category, patientAllergies]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -95,6 +132,12 @@ export function AddTaskModal({ patientId, connections = [], onClose, onTaskCreat
       setIsSubmitting(false);
     }
   };
+
+  const worstSeverity = allergyWarnings.reduce<string | null>((worst, w) => {
+    const order = ["CAUTION", "HIGH", "CRITICAL"];
+    if (!worst) return w.severity;
+    return order.indexOf(w.severity) > order.indexOf(worst) ? w.severity : worst;
+  }, null);
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
@@ -175,6 +218,39 @@ export function AddTaskModal({ patientId, connections = [], onClose, onTaskCreat
               </select>
             </div>
           </div>
+
+          {/* ── Allergy conflict warning ─────────────────────────────────── */}
+          {allergyWarnings.length > 0 && (
+            <div className={`border-2 rounded-xl p-4 ${SEVERITY_STYLES[worstSeverity ?? "CAUTION"]}`}>
+              <div className="flex items-center gap-2 mb-2">
+                <ShieldAlert className="w-5 h-5 flex-shrink-0" />
+                <span className="font-bold text-base">
+                  {worstSeverity === "CRITICAL"
+                    ? "CRITICAL: Potential Allergy Conflict"
+                    : worstSeverity === "HIGH"
+                    ? "WARNING: Possible Allergy Conflict"
+                    : "Caution: Possible Allergy Conflict"}
+                </span>
+              </div>
+              <p className="text-sm mb-3">
+                This patient has recorded allergies that may conflict with this medication task.
+                Verify with the prescribing clinician before proceeding.
+              </p>
+              <div className="space-y-1.5">
+                {allergyWarnings.map((w, i) => (
+                  <div key={i} className="flex items-start gap-2 text-sm">
+                    <AlertTriangle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                    <span>
+                      <span className={`font-bold text-xs px-1.5 py-0.5 rounded mr-1.5 ${SEVERITY_BADGE[w.severity]}`}>
+                        {w.severity}
+                      </span>
+                      Allergic to <strong>{w.allergen}</strong> — {w.reason}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Due Date and Time row */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -261,10 +337,20 @@ export function AddTaskModal({ patientId, connections = [], onClose, onTaskCreat
             <button
               type="submit"
               disabled={isSubmitting}
-              className="flex-1 flex items-center justify-center gap-2 px-4 py-3.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors font-semibold text-base disabled:opacity-50 disabled:cursor-not-allowed"
+              className={`flex-1 flex items-center justify-center gap-2 px-4 py-3.5 rounded-xl hover:opacity-90 transition-colors font-semibold text-base disabled:opacity-50 disabled:cursor-not-allowed text-white ${
+                worstSeverity === "CRITICAL"
+                  ? "bg-red-600 hover:bg-red-700"
+                  : worstSeverity === "HIGH"
+                  ? "bg-orange-600 hover:bg-orange-700"
+                  : "bg-blue-600 hover:bg-blue-700"
+              }`}
             >
               {isSubmitting && <Loader2 className="w-5 h-5 animate-spin" />}
-              {isSubmitting ? "Creating..." : "Create Task"}
+              {isSubmitting
+                ? "Creating..."
+                : allergyWarnings.length > 0
+                ? "Create Task (Allergy Warning)"
+                : "Create Task"}
             </button>
             <button
               type="button"

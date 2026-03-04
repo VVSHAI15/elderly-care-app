@@ -153,6 +153,9 @@ export default function DashboardPage() {
     setActiveTab("tasks");
     setPatientError(null);
     setPatientLoading(true);
+    // Close any open modals so stale data from the previous patient never shows
+    setShowAddTask(false);
+    setShowEditCareProfile(false);
     try {
       const response = await fetch(`/api/patients/${patientId}`);
       if (response.ok) {
@@ -437,6 +440,13 @@ export default function DashboardPage() {
                     key={`${currentPatientId}-${taskListKey}`}
                     patientId={currentPatientId}
                     connections={connections}
+                    patientAllergies={
+                      patient?.allergies
+                        ? (Array.isArray((patient.allergies as { items?: unknown[] })?.items)
+                            ? (patient.allergies as { items: { substance: string; reaction?: string; severity?: string }[] }).items
+                            : [])
+                        : []
+                    }
                   />
                 </div>
               )}
@@ -600,6 +610,13 @@ export default function DashboardPage() {
               <AddTaskModal
                 patientId={currentPatientId}
                 connections={connections}
+                patientAllergies={
+                  patient?.allergies
+                    ? (Array.isArray((patient.allergies as { items?: unknown[] })?.items)
+                        ? (patient.allergies as { items: { substance: string; reaction?: string; severity?: string }[] }).items
+                        : [])
+                    : []
+                }
                 onClose={() => setShowAddTask(false)}
                 onTaskCreated={() => setTaskListKey((k) => k + 1)}
               />

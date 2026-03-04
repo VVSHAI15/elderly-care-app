@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth/config";
 import prisma from "@/lib/db";
 import { updatePatientCareProfile } from "@/lib/care-profile-update";
 import { createTasksFromCareProfile } from "@/lib/care-profile-tasks";
@@ -7,6 +9,11 @@ import { findProtocolsForConditions } from "@/lib/condition-protocols";
 import { createTasksFromProtocol } from "@/lib/care-profile-tasks";
 
 export async function POST(request: NextRequest) {
+  const session = await getServerSession(authOptions);
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   const body = await request.json();
   const {
     patientId,

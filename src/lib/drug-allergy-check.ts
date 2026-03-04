@@ -157,13 +157,36 @@ const DRUG_ALLERGY_RULES: DrugAllergyRule[] = [
 ];
 
 /**
- * Normalize a substance/drug name for matching.
+ * Normalize a substance/drug name for exact matching.
  */
 function normalizeForMatching(name: string): string {
   return name.toLowerCase()
     .replace(/[^a-z0-9\s-]/g, " ")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+/**
+ * Normalize for fuzzy matching: collapse consecutive duplicate letters
+ * so typos like "peniccilin" → "penicilin" match "penicillin" → "penicilin".
+ */
+function normalizeFuzzy(name: string): string {
+  return normalizeForMatching(name)
+    .replace(/(.)\1+/g, "$1"); // collapse "ll" → "l", "cc" → "c", etc.
+}
+
+/**
+ * Returns true if a and b are a fuzzy match (exact OR duplicate-letter-collapsed match,
+ * or one contains the other in either normalized form).
+ */
+function fuzzyIncludes(haystack: string, needle: string): boolean {
+  if (!needle || !haystack) return false;
+  // Exact substring match
+  if (haystack.includes(needle) || needle.includes(haystack)) return true;
+  // Fuzzy (collapsed duplicates) match
+  const fh = normalizeFuzzy(haystack);
+  const fn = normalizeFuzzy(needle);
+  return fh.includes(fn) || fn.includes(fh);
 }
 
 /**
@@ -180,8 +203,8 @@ export function checkMedicationAgainstAllergies(
   for (const allergy of allergies) {
     const normAllergen = normalizeForMatching(allergy.substance);
 
-    // Direct name match first
-    if (normAllergen && normMed.includes(normAllergen) || normAllergen.includes(normMed)) {
+    // Direct / fuzzy name match first (e.g. "peniccilin" matches "penicillin")
+    if (normAllergen && fuzzyIncludes(normMed, normAllergen)) {
       conflicts.push({
         allergen: allergy.substance,
         medication: medicationName,
@@ -195,13 +218,13 @@ export function checkMedicationAgainstAllergies(
     for (const rule of DRUG_ALLERGY_RULES) {
       // Check if the allergy matches this rule's allergen keywords
       const allergenMatch = rule.allergenKeywords.some(
-        (kw) => normAllergen.includes(normalizeForMatching(kw)) || normalizeForMatching(kw).includes(normAllergen)
+        (kw) => fuzzyIncludes(normAllergen, normalizeForMatching(kw))
       );
       if (!allergenMatch) continue;
 
       // Check if the medication matches this rule's conflicting drug keywords
       const drugMatch = rule.conflictingDrugKeywords.some(
-        (kw) => normMed.includes(normalizeForMatching(kw)) || normalizeForMatching(kw).includes(normMed)
+        (kw) => fuzzyIncludes(normMed, normalizeForMatching(kw))
       );
       if (!drugMatch) continue;
 
