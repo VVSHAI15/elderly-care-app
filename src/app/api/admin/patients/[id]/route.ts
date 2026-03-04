@@ -2,9 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth/config";
 import prisma from "@/lib/db";
-import { Resend } from "resend";
-
-const resend = new Resend(process.env.RESEND_API_KEY);
+import nodemailer from "nodemailer";
+import { updatePatientCareProfile } from "@/lib/care-profile-update";
 
 function generateCode(length = 8) {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -60,6 +59,17 @@ export async function GET(
       shifts: patient.familyCanViewShifts,
     },
     counts: patient._count,
+    // Care profile fields
+    dischargeInfo: patient.dischargeInfo,
+    exerciseGuidelines: patient.exerciseGuidelines,
+    dietRestrictions: patient.dietRestrictions,
+    warningSigns: patient.warningSigns,
+    careContacts: patient.careContacts,
+    followUpAppointments: patient.followUpAppointments,
+    allergies: (patient as Record<string, unknown>).allergies ?? null,
+    conditions: (patient as Record<string, unknown>).conditions ?? null,
+    healthHistory: (patient as Record<string, unknown>).healthHistory ?? null,
+    illnessHistory: (patient as Record<string, unknown>).illnessHistory ?? null,
   });
 }
 
@@ -145,8 +155,12 @@ export async function PATCH(
     const inviteUrl = `${process.env.NEXT_PUBLIC_APP_URL}/register?familyInvite=${code}`;
 
     try {
-      await resend.emails.send({
-        from: "guardian.ai <notifications@carecheck.app>",
+      const transporter = nodemailer.createTransport({
+        service: "gmail",
+        auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS },
+      });
+      await transporter.sendMail({
+        from: `"guardian.ai" <${process.env.EMAIL_USER}>`,
         to: email,
         subject: `You've been invited to view ${patientDetail?.user.name ?? "a patient"}'s care on guardian.ai`,
         html: `
@@ -166,6 +180,19 @@ export async function PATCH(
     }
 
     return NextResponse.json({ message: "Invite sent", action: "invited" });
+  }
+
+  // Update care profile
+  if (body.careProfile !== undefined) {
+    const cp = body.careProfile as Record<string, unknown>;
+    const updateData: Record<string, unknown> = {};
+    const fields = ["dischargeInfo", "exerciseGuidelines", "dietRestrictions", "warningSigns",
+      "careContacts", "followUpAppointments", "allergies", "conditions", "healthHistory", "illnessHistory"];
+    for (const field of fields) {
+      if (cp[field] !== undefined) updateData[field] = cp[field];
+    }
+    await updatePatientCareProfile(id, updateData);
+    return NextResponse.json({ message: "Care profile updated" });
   }
 
   // Update visibility settings

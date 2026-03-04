@@ -5,30 +5,46 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-const SYSTEM_PROMPT = `You are a medical document analyzer. Analyze the prescription or medical document and extract all medication information.
+const SYSTEM_PROMPT = `You are a medical document analyzer. Analyze the medical document and extract ALL structured information for a caregiver care profile.
 
-Return a JSON object with:
-1. "summary": a short plain-English summary (2-3 sentences) of what this document contains, suitable for a patient or caregiver to quickly understand the key points.
+Return a JSON object with these fields:
+
+1. "summary": a short plain-English summary (2-3 sentences) of what this document contains.
 
 2. "medications": array of medications found, each with:
-   - name: medication name
-   - dosage: dosage amount (e.g., "10mg", "500mg")
-   - frequency: how often to take (e.g., "once daily", "twice daily", "every 8 hours")
-   - instructions: any special instructions (optional)
-   - quantity: quantity dispensed (optional)
-   - refills: number of refills (optional)
+   - name, dosage, frequency, instructions (optional), quantity (optional), refills (optional)
 
 3. "pharmacy": pharmacy name if visible (optional)
 4. "prescriber": doctor/prescriber name if visible (optional)
 5. "patient": patient name if visible (optional)
 6. "rawText": key text you can read from the document
 
-7. "medicalTerms": an array of medical terms, abbreviations, or jargon found in the document that a non-medical person might not understand. For each item provide:
-   - term: the medical word or abbreviation exactly as it appears in the document (e.g., "Hypertension", "BID", "eGFR", "Metformin")
-   - explanation: a plain-language explanation in 1-2 short sentences that an elderly patient or their non-medical family member could easily understand. Do not use other medical jargon in the explanation. Write as if explaining to a grandparent.
-   Include: diagnosis names, medication names, medical abbreviations (BID, PRN, q.d., PO, etc.), procedure names, lab test names and values, and any other specialized terms. Aim for 5-15 terms depending on document complexity. If the document is very simple with no jargon, return an empty array.
+7. "medicalTerms": array of medical terms a non-medical person might not understand, each with:
+   - term: the exact word/abbreviation as it appears
+   - explanation: plain-language explanation (1-2 sentences, no jargon, as if explaining to a grandparent)
+   Aim for 5-15 terms. Return empty array if none.
 
-If you cannot read the document clearly or no medications are found, still return the structure with empty medications array, empty medicalTerms array, and a summary noting the issue.
+8. "careProfile": object with all care profile information found in the document. Include only fields that are actually present. All fields are optional:
+   - "dischargeInfo": { hospital, diagnosis, mrn, admissionDate, dischargeDate, attendingPhysician, followUpPhysician }
+   - "warningSigns": {
+       "emergency": array of strings — symptoms requiring 911 (e.g. "Sudden severe chest pain"),
+       "callDoctor": array of strings — symptoms requiring same-day doctor call
+     }
+   - "exerciseGuidelines": {
+       "phases": array of { period: string (e.g. "Week 1-2"), instructions: string },
+       "restrictions": array of strings (e.g. "No heavy lifting over 10 lbs for 4 weeks")
+     }
+   - "dietRestrictions": {
+       "items": array of { category: string (e.g. "Sodium"), instruction: string }
+     }
+   - "followUpAppointments": array of { priority: "URGENT"|"REQUIRED"|"SCHEDULED"|"RECOMMENDED", type, timeframe, physician, reason }
+   - "careContacts": array of { name, phone, hours }
+   - "allergies": { "items": array of { substance: string, reaction: string, severity?: "Mild"|"Moderate"|"Severe" } }
+   - "conditions": { "items": array of { name: string, status?: "Active"|"Managed"|"Resolved", notes?: string } }
+   - "healthHistory": { "items": array of { event: string, date?: string, notes?: string } — surgeries, hospitalizations, procedures }
+   - "illnessHistory": { "items": array of { illness: string, date?: string, notes?: string } }
+
+If the document is a discharge summary, focus on extracting the full careProfile. If it is a simple prescription, careProfile may be empty or minimal.
 
 Return ONLY valid JSON, no other text.`;
 
@@ -64,7 +80,7 @@ async function analyzeImage(buffer: Buffer, fileType: string) {
         ],
       },
     ],
-    max_tokens: 2500,
+    max_tokens: 4000,
   });
 
   return completion.choices[0]?.message?.content || "{}";
@@ -77,10 +93,10 @@ async function analyzePdfText(text: string) {
       { role: "system", content: SYSTEM_PROMPT },
       {
         role: "user",
-        content: `Please analyze the following medical document text and extract all medication information:\n\n${text}`,
+        content: `Please analyze the following medical document and extract all information including medications and the full care profile:\n\n${text}`,
       },
     ],
-    max_tokens: 2500,
+    max_tokens: 4000,
   });
 
   return completion.choices[0]?.message?.content || "{}";
@@ -145,6 +161,7 @@ export async function POST(request: NextRequest) {
       summary: parsedResult.summary || "",
       rawText: parsedResult.rawText,
       medicalTerms: parsedResult.medicalTerms || [],
+      careProfile: parsedResult.careProfile || null,
     });
   } catch (error) {
     console.error("Error processing document:", error);

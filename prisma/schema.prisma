@@ -94,6 +94,18 @@ model Patient {
   organizationId   String?
   organization     Organization? @relation(fields: [organizationId], references: [id])
 
+  // Care Profile (structured data from discharge documents or manual entry)
+  dischargeInfo        Json?   // DischargeInfo
+  exerciseGuidelines   Json?   // ExerciseGuidelines
+  dietRestrictions     Json?   // DietRestrictions
+  warningSigns         Json?   // WarningSigns
+  careContacts         Json?   // CareContact[]
+  followUpAppointments Json?   // FollowUpAppointment[]
+  allergies            Json?   // { items: [{ substance, reaction, severity? }] }
+  conditions           Json?   // { items: [{ name, status?, notes? }] }
+  healthHistory        Json?   // { items: [{ event, date?, notes? }] }
+  illnessHistory       Json?   // { items: [{ illness, date?, notes? }] }
+
   // Family visibility settings (admin-controlled)
   familyCanViewTasks   Boolean @default(true)
   familyCanViewMeds    Boolean @default(true)

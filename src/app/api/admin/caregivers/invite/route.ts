@@ -2,9 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth/config";
 import prisma from "@/lib/db";
-import { Resend } from "resend";
-
-const resend = new Resend(process.env.RESEND_API_KEY);
+import nodemailer from "nodemailer";
 
 function generateCode(length = 8) {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -54,8 +52,12 @@ export async function POST(request: NextRequest) {
 
   // Send invite email
   try {
-    await resend.emails.send({
-      from: "guardian.ai <notifications@carecheck.app>",
+    const transporter = nodemailer.createTransport({
+      service: "gmail",
+      auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS },
+    });
+    await transporter.sendMail({
+      from: `"guardian.ai" <${process.env.EMAIL_USER}>`,
       to: email,
       subject: `You're invited to join ${org?.name} on guardian.ai`,
       html: `

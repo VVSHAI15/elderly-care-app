@@ -1,7 +1,10 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Users, Plus, Loader2, ChevronRight, AlertTriangle, Eye, EyeOff, UserPlus, UserMinus, Mail, CheckCircle } from "lucide-react";
+import { Users, Plus, Loader2, ChevronRight, AlertTriangle, Eye, EyeOff, UserPlus, UserMinus, Mail, CheckCircle, FileText } from "lucide-react";
+import { CareProfileView } from "@/components/patient/CareProfileView";
+import { EditCareProfileModal } from "@/components/patient/EditCareProfileModal";
+import type { CareProfile } from "@/types/care-profile";
 
 interface PatientSummary {
   patientId: string;
@@ -15,6 +18,7 @@ interface PatientSummary {
   todayTasks: { total: number; completed: number; pending: number; overdue: number };
   activeMedications: number;
   visibility: { tasks: boolean; meds: boolean; metrics: boolean; shifts: boolean };
+  careProfile?: CareProfile;
 }
 
 interface Caregiver {
@@ -34,6 +38,8 @@ export function AdminPatients() {
   const [actionLoading, setActionLoading] = useState(false);
   const [connectEmail, setConnectEmail] = useState("");
   const [connectFeedback, setConnectFeedback] = useState<{ action: "connected" | "invited"; email: string } | null>(null);
+  const [patientDetailTab, setPatientDetailTab] = useState<"team" | "care-profile">("team");
+  const [showEditCareProfile, setShowEditCareProfile] = useState(false);
 
   // New patient form state
   const [form, setForm] = useState({
@@ -55,11 +61,31 @@ export function AdminPatients() {
   const handleSelectPatient = async (p: PatientSummary) => {
     setSelectedPatient(p);
     setConnectFeedback(null);
-    // Fetch patient detail to get pending invites
+    setPatientDetailTab("team");
+    // Fetch patient detail to get pending invites + care profile
     const res = await fetch(`/api/admin/patients/${p.patientId}`);
     if (res.ok) {
       const detail = await res.json();
-      setSelectedPatient((prev) => prev ? { ...prev, pendingFamilyInvites: detail.pendingFamilyInvites } : prev);
+      setSelectedPatient((prev) =>
+        prev
+          ? {
+              ...prev,
+              pendingFamilyInvites: detail.pendingFamilyInvites,
+              careProfile: {
+                dischargeInfo: detail.dischargeInfo,
+                exerciseGuidelines: detail.exerciseGuidelines,
+                dietRestrictions: detail.dietRestrictions,
+                warningSigns: detail.warningSigns,
+                careContacts: detail.careContacts,
+                followUpAppointments: detail.followUpAppointments,
+                allergies: detail.allergies,
+                conditions: detail.conditions,
+                healthHistory: detail.healthHistory,
+                illnessHistory: detail.illnessHistory,
+              },
+            }
+          : prev
+      );
     }
   };
 
@@ -161,6 +187,56 @@ export function AdminPatients() {
             <p className="text-gray-500 text-sm">{selectedPatient.email}</p>
           </div>
         </div>
+
+        {/* Tab switcher */}
+        <div className="flex gap-2">
+          <button
+            onClick={() => setPatientDetailTab("team")}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-colors ${
+              patientDetailTab === "team"
+                ? "bg-[#2f5f9f] text-white"
+                : "bg-white border-2 border-[#d8e2f1] text-gray-700 hover:bg-[#f0f5fd]"
+            }`}
+          >
+            <Users className="w-4 h-4" />
+            Team & Settings
+          </button>
+          <button
+            onClick={() => setPatientDetailTab("care-profile")}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-colors ${
+              patientDetailTab === "care-profile"
+                ? "bg-[#2f5f9f] text-white"
+                : "bg-white border-2 border-[#d8e2f1] text-gray-700 hover:bg-[#f0f5fd]"
+            }`}
+          >
+            <FileText className="w-4 h-4" />
+            Care Profile
+          </button>
+        </div>
+
+        {/* Care Profile tab */}
+        {patientDetailTab === "care-profile" && (
+          <>
+            {showEditCareProfile && (
+              <EditCareProfileModal
+                patientId={selectedPatient.patientId}
+                initial={selectedPatient.careProfile}
+                onSave={(updated) => {
+                  setSelectedPatient((prev) => prev ? { ...prev, careProfile: updated } : prev);
+                }}
+                onClose={() => setShowEditCareProfile(false)}
+              />
+            )}
+            <CareProfileView
+              {...selectedPatient.careProfile}
+              onEdit={() => setShowEditCareProfile(true)}
+            />
+          </>
+        )}
+
+        {/* Team & Settings tab */}
+        {patientDetailTab === "team" && (
+          <div className="space-y-6">
 
         {/* Assigned Caregivers */}
         <div className="bg-[#f0f5fd] border-2 border-[#d8e2f1] rounded-2xl p-5">
@@ -306,6 +382,8 @@ export function AdminPatients() {
             );
           })}
         </div>
+          </div>
+        )}
       </div>
     );
   }

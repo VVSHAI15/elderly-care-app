@@ -16,6 +16,8 @@ import {
   LogIn,
   Database,
   AlertTriangle,
+  UserPlus,
+  X,
 } from "lucide-react";
 
 interface DevData {
@@ -77,6 +79,10 @@ export default function DevPage() {
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<"users" | "patients" | "tasks" | "meds" | "docs" | "invites">("users");
+  const [showCreateUser, setShowCreateUser] = useState(false);
+  const [createUserForm, setCreateUserForm] = useState({ name: "", email: "", password: "", role: "PATIENT", orgName: "" });
+  const [createUserError, setCreateUserError] = useState<string | null>(null);
+  const [createUserLoading, setCreateUserLoading] = useState(false);
 
   const fetchData = async () => {
     setLoading(true);
@@ -115,12 +121,54 @@ export default function DevPage() {
     }
   };
 
-  const loginAs = async (email: string) => {
+  const loginAs = async (email: string, role: string) => {
+    const callbackUrl = role === "ADMIN" ? "/admin" : role === "FAMILY_MEMBER" ? "/family" : "/dashboard";
     await signIn("credentials", {
       email,
       password: "password123",
-      callbackUrl: "/dashboard",
+      callbackUrl,
     });
+  };
+
+  const createUser = async () => {
+    setCreateUserError(null);
+    setCreateUserLoading(true);
+    try {
+      const res = await fetch("/api/dev/users", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: createUserForm.name || undefined,
+          email: createUserForm.email,
+          password: createUserForm.password || undefined,
+          role: createUserForm.role,
+          orgName: createUserForm.orgName || undefined,
+        }),
+      });
+      const result = await res.json();
+      if (!res.ok) {
+        setCreateUserError(result.error || "Failed to create user");
+        return;
+      }
+      setShowCreateUser(false);
+      setCreateUserForm({ name: "", email: "", password: "", role: "PATIENT", orgName: "" });
+      fetchData();
+    } catch {
+      setCreateUserError("Network error");
+    } finally {
+      setCreateUserLoading(false);
+    }
+  };
+
+  const deleteUser = async (id: string, email: string) => {
+    if (!confirm(`Delete user ${email}? This will also delete all their data.`)) return;
+    try {
+      const res = await fetch(`/api/dev/users?id=${id}`, { method: "DELETE" });
+      if (res.ok) fetchData();
+      else alert("Failed to delete user");
+    } catch {
+      alert("Network error");
+    }
   };
 
   return (
@@ -259,6 +307,115 @@ export default function DevPage() {
           </p>
         </div>
 
+        {/* Create User Panel */}
+        <div className="bg-gray-800 rounded-lg border border-gray-700 mb-6">
+          <button
+            onClick={() => { setShowCreateUser(!showCreateUser); setCreateUserError(null); }}
+            className="w-full flex items-center justify-between px-4 py-3 text-sm font-medium hover:bg-gray-750 transition-colors"
+          >
+            <div className="flex items-center gap-2 text-green-400">
+              <UserPlus className="w-4 h-4" />
+              Create New User
+            </div>
+            <span className="text-gray-500">{showCreateUser ? "▲" : "▼"}</span>
+          </button>
+          {showCreateUser && (
+            <div className="px-4 pb-4 border-t border-gray-700 pt-4">
+              <div className="grid grid-cols-2 gap-3 mb-3">
+                <div>
+                  <label className="text-xs text-gray-400 block mb-1">Name (optional)</label>
+                  <input
+                    type="text"
+                    placeholder="John Doe"
+                    value={createUserForm.name}
+                    onChange={(e) => setCreateUserForm((f) => ({ ...f, name: e.target.value }))}
+                    className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-gray-400 block mb-1">Email *</label>
+                  <input
+                    type="email"
+                    placeholder="user@example.com"
+                    value={createUserForm.email}
+                    onChange={(e) => setCreateUserForm((f) => ({ ...f, email: e.target.value }))}
+                    className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-gray-400 block mb-1">Password (default: password123)</label>
+                  <input
+                    type="text"
+                    placeholder="password123"
+                    value={createUserForm.password}
+                    onChange={(e) => setCreateUserForm((f) => ({ ...f, password: e.target.value }))}
+                    className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-gray-400 block mb-1">Role</label>
+                  <select
+                    value={createUserForm.role}
+                    onChange={(e) => setCreateUserForm((f) => ({ ...f, role: e.target.value }))}
+                    className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500"
+                  >
+                    <option value="PATIENT">PATIENT</option>
+                    <option value="FAMILY_MEMBER">FAMILY_MEMBER</option>
+                    <option value="CAREGIVER">CAREGIVER</option>
+                    <option value="ADMIN">ADMIN</option>
+                  </select>
+                </div>
+              </div>
+              {(createUserForm.role === "ADMIN" || createUserForm.role === "CAREGIVER") && (
+                <div className="mt-3">
+                  <label className="text-xs text-gray-400 block mb-1">
+                    Organization Name{createUserForm.role === "ADMIN" ? " (required for admin panel access)" : " (optional)"}
+                  </label>
+                  <input
+                    type="text"
+                    placeholder={createUserForm.role === "ADMIN" ? "Riverside Care Group" : "Leave blank for independent caregiver"}
+                    value={createUserForm.orgName}
+                    onChange={(e) => setCreateUserForm((f) => ({ ...f, orgName: e.target.value }))}
+                    className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-blue-500"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">Creates org if it doesn&apos;t exist, or joins existing one with that name.</p>
+                </div>
+              )}
+              {createUserError && (
+                <p className="text-red-400 text-xs mb-3 mt-2">{createUserError}</p>
+              )}
+              <div className="flex gap-2 mt-3">
+                <button
+                  onClick={createUser}
+                  disabled={createUserLoading || !createUserForm.email || (createUserForm.role === "ADMIN" && !createUserForm.orgName)}
+                  className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 rounded text-sm font-medium transition-colors disabled:opacity-50"
+                >
+                  <Plus className="w-4 h-4" />
+                  {createUserLoading ? "Creating..." : "Create User"}
+                </button>
+                <button
+                  onClick={() => setShowCreateUser(false)}
+                  className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded text-sm font-medium transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+              {createUserForm.role === "PATIENT" && (
+                <p className="text-xs text-gray-500 mt-2">A Patient record will be created automatically. Login goes to <code className="bg-gray-700 px-1 rounded">/dashboard</code></p>
+              )}
+              {createUserForm.role === "CAREGIVER" && (
+                <p className="text-xs text-gray-500 mt-2">Login goes to <code className="bg-gray-700 px-1 rounded">/dashboard</code></p>
+              )}
+              {createUserForm.role === "FAMILY_MEMBER" && (
+                <p className="text-xs text-gray-500 mt-2">Login goes to <code className="bg-gray-700 px-1 rounded">/family</code></p>
+              )}
+              {createUserForm.role === "ADMIN" && (
+                <p className="text-xs text-gray-500 mt-2">Login goes to <code className="bg-gray-700 px-1 rounded">/admin</code>. Org name is required to access the admin panel.</p>
+              )}
+            </div>
+          )}
+        </div>
+
         {/* Tabs */}
         <div className="flex gap-2 mb-4 flex-wrap">
           {[
@@ -299,7 +456,8 @@ export default function DevPage() {
                       <th className="text-left p-3 font-medium">Role</th>
                       <th className="text-left p-3 font-medium">Patient?</th>
                       <th className="text-left p-3 font-medium">Connected To</th>
-                      <th className="text-left p-3 font-medium">Actions</th>
+                      <th className="text-left p-3 font-medium">Login</th>
+                      <th className="text-left p-3 font-medium">Delete</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-700">
@@ -322,10 +480,20 @@ export default function DevPage() {
                         </td>
                         <td className="p-3">
                           <button
-                            onClick={() => loginAs(user.email)}
+                            onClick={() => loginAs(user.email, user.role)}
                             className="flex items-center gap-1 text-xs bg-gray-700 hover:bg-gray-600 px-2 py-1 rounded"
+                            title={`→ ${user.role === "ADMIN" ? "/admin" : user.role === "FAMILY_MEMBER" ? "/family" : "/dashboard"}`}
                           >
-                            <LogIn className="w-3 h-3" /> Login
+                            <LogIn className="w-3 h-3" />
+                            {user.role === "ADMIN" ? "→ /admin" : user.role === "FAMILY_MEMBER" ? "→ /family" : "→ /dashboard"}
+                          </button>
+                        </td>
+                        <td className="p-3">
+                          <button
+                            onClick={() => deleteUser(user.id, user.email)}
+                            className="flex items-center gap-1 text-xs bg-red-900 hover:bg-red-700 px-2 py-1 rounded text-red-300"
+                          >
+                            <X className="w-3 h-3" /> Delete
                           </button>
                         </td>
                       </tr>

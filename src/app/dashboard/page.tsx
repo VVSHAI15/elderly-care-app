@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { Heart, Plus, Upload, LogOut, Loader2, Users, History, Pill, ArrowLeft, Activity, Clock } from "lucide-react";
+import { Heart, Plus, Upload, LogOut, Loader2, Users, History, Pill, ArrowLeft, Activity, Clock, FileText } from "lucide-react";
 import { signOut } from "next-auth/react";
 import { DocumentScanner } from "@/components/documents/DocumentScanner";
 import { TaskList } from "@/components/tasks/TaskList";
@@ -16,6 +16,9 @@ import { MedicationsList } from "@/components/medications/MedicationsList";
 import { CaretakerDashboard } from "@/components/dashboard/CaretakerDashboard";
 import { ClockInOut } from "@/components/caregiver/ClockInOut";
 import { HealthMetricLogger } from "@/components/caregiver/HealthMetricLogger";
+import { CareProfileView } from "@/components/patient/CareProfileView";
+import { EditCareProfileModal } from "@/components/patient/EditCareProfileModal";
+import type { CareProfile } from "@/types/care-profile";
 
 interface PatientData {
   id: string;
@@ -23,10 +26,18 @@ interface PatientData {
   dateOfBirth: string | null;
   medicalNotes: string | null;
   emergencyContact: string | null;
-  user?: {
-    name: string | null;
-    email: string;
-  };
+  user?: { name: string | null; email: string };
+  medications?: Array<{ id: string; name: string; dosage: string; frequency: string; prescriber?: string | null }>;
+  dischargeInfo?: CareProfile["dischargeInfo"];
+  exerciseGuidelines?: CareProfile["exerciseGuidelines"];
+  dietRestrictions?: CareProfile["dietRestrictions"];
+  warningSigns?: CareProfile["warningSigns"];
+  careContacts?: CareProfile["careContacts"];
+  followUpAppointments?: CareProfile["followUpAppointments"];
+  allergies?: CareProfile["allergies"];
+  conditions?: CareProfile["conditions"];
+  healthHistory?: CareProfile["healthHistory"];
+  illnessHistory?: CareProfile["illnessHistory"];
 }
 
 interface Connection {
@@ -46,7 +57,7 @@ interface ConnectedPatient {
 export default function DashboardPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<"tasks" | "scan" | "medications" | "connections" | "history" | "vitals" | "shifts">("tasks");
+  const [activeTab, setActiveTab] = useState<"tasks" | "scan" | "medications" | "connections" | "history" | "vitals" | "shifts" | "care-profile">("tasks");
   const [showAddTask, setShowAddTask] = useState(false);
   const [patient, setPatient] = useState<PatientData | null>(null);
   const [connections, setConnections] = useState<Connection[]>([]);
@@ -56,6 +67,7 @@ export default function DashboardPage() {
   const [taskListKey, setTaskListKey] = useState(0);
   const [medicationsKey, setMedicationsKey] = useState(0);
   const [viewingPatientDetail, setViewingPatientDetail] = useState(false);
+  const [showEditCareProfile, setShowEditCareProfile] = useState(false);
 
   const fetchConnections = useCallback(async () => {
     try {
@@ -149,6 +161,16 @@ export default function DashboardPage() {
     setViewingPatientDetail(false);
     setSelectedPatientId(null);
     setPatient(null);
+  };
+
+  const refreshPatient = async (patientId: string) => {
+    try {
+      const response = await fetch(`/api/patients/${patientId}`);
+      if (response.ok) {
+        const data = await response.json();
+        setPatient(data);
+      }
+    } catch { /* silent */ }
   };
 
   if (status === "loading" || loading) {
@@ -333,6 +355,17 @@ export default function DashboardPage() {
                     <Activity className="w-5 h-5" />
                     Vitals
                   </button>
+                  <button
+                    onClick={() => setActiveTab("care-profile")}
+                    className={`px-5 py-3 rounded-xl font-semibold text-base transition-colors flex items-center gap-2 ${
+                      activeTab === "care-profile"
+                        ? "bg-[#2f5f9f] text-white shadow-[0_10px_20px_rgba(47,95,159,0.30)] ring-2 ring-[#9cbbe2]"
+                        : "bg-white text-gray-800 hover:bg-[#eff5ff] border-2 border-[#d6e2f1]"
+                    }`}
+                  >
+                    <FileText className="w-5 h-5" />
+                    Care Profile
+                  </button>
                 </>
               )}
               <button
@@ -385,6 +418,7 @@ export default function DashboardPage() {
                     onScanComplete={() => {
                       setTaskListKey((k) => k + 1);
                       setMedicationsKey((k) => k + 1);
+                      refreshPatient(currentPatientId);
                     }}
                   />
                 </div>
@@ -451,6 +485,48 @@ export default function DashboardPage() {
                 <div>
                   <h2 className="text-xl font-bold text-gray-900 mb-6">Health Vitals</h2>
                   <HealthMetricLogger patientId={currentPatientId} />
+                </div>
+              )}
+
+              {activeTab === "care-profile" && currentPatientId && (
+                <div>
+                  <h2 className="text-xl font-bold text-gray-900 mb-1">Care Profile</h2>
+                  <p className="text-sm text-gray-500 mb-6">
+                    Allergies, conditions, medications, health history, warning signs, and more.
+                  </p>
+                  <CareProfileView
+                    dischargeInfo={patient?.dischargeInfo}
+                    exerciseGuidelines={patient?.exerciseGuidelines}
+                    dietRestrictions={patient?.dietRestrictions}
+                    warningSigns={patient?.warningSigns}
+                    careContacts={patient?.careContacts}
+                    followUpAppointments={patient?.followUpAppointments}
+                    allergies={patient?.allergies}
+                    conditions={patient?.conditions}
+                    healthHistory={patient?.healthHistory}
+                    illnessHistory={patient?.illnessHistory}
+                    medications={patient?.medications}
+                    onEdit={() => setShowEditCareProfile(true)}
+                  />
+                  {showEditCareProfile && patient && (
+                    <EditCareProfileModal
+                      patientId={currentPatientId}
+                      initial={{
+                        dischargeInfo: patient.dischargeInfo,
+                        exerciseGuidelines: patient.exerciseGuidelines,
+                        dietRestrictions: patient.dietRestrictions,
+                        warningSigns: patient.warningSigns,
+                        careContacts: patient.careContacts,
+                        followUpAppointments: patient.followUpAppointments,
+                        allergies: patient.allergies,
+                        conditions: patient.conditions,
+                        healthHistory: patient.healthHistory,
+                        illnessHistory: patient.illnessHistory,
+                      }}
+                      onSave={() => refreshPatient(currentPatientId)}
+                      onClose={() => setShowEditCareProfile(false)}
+                    />
+                  )}
                 </div>
               )}
 
