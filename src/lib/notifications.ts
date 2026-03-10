@@ -21,7 +21,7 @@ function getEmailTransporter(): nodemailer.Transporter | null {
 interface NotificationPayload {
   userId: string;
   taskId?: string;
-  type: "TASK_REMINDER" | "TASK_COMPLETED" | "TASK_OVERDUE" | "MEDICATION_REFILL" | "APPOINTMENT_REMINDER" | "SYSTEM";
+  type: "TASK_REMINDER" | "TASK_COMPLETED" | "TASK_OVERDUE" | "MEDICATION_REFILL" | "APPOINTMENT_REMINDER" | "SYSTEM" | "SHIFT_REQUEST" | "SHIFT_APPROVED" | "SHIFT_REJECTED" | "SHIFT_COVERED";
   title: string;
   message: string;
 }

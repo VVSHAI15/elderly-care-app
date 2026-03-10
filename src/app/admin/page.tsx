@@ -3,15 +3,16 @@
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { Heart, LogOut, Building2, Loader2, Users, BarChart2, Clock } from "lucide-react";
+import { Heart, LogOut, Building2, Loader2, Users, BarChart2, Clock, CalendarClock } from "lucide-react";
 import { signOut } from "next-auth/react";
 import { NotificationBell } from "@/components/notifications/NotificationBell";
 import { AdminCaregivers } from "@/components/admin/AdminCaregivers";
 import { AdminPatients } from "@/components/admin/AdminPatients";
 import { AdminShifts } from "@/components/admin/AdminShifts";
 import { AdminAnalytics } from "@/components/admin/AdminAnalytics";
+import { AdminSchedule } from "@/components/admin/AdminSchedule";
 
-type Tab = "caregivers" | "patients" | "shifts" | "analytics";
+type Tab = "caregivers" | "patients" | "shifts" | "schedule" | "analytics";
 
 export default function AdminPage() {
   const { data: session, status } = useSession();
@@ -39,6 +40,7 @@ export default function AdminPage() {
   const tabs: { key: Tab; label: string; icon: React.ReactNode }[] = [
     { key: "patients", label: "Patients", icon: <Users className="w-4 h-4" /> },
     { key: "caregivers", label: "Caregivers", icon: <Users className="w-4 h-4" /> },
+    { key: "schedule", label: "Schedule", icon: <CalendarClock className="w-4 h-4" /> },
     { key: "shifts", label: "Shift Log", icon: <Clock className="w-4 h-4" /> },
     { key: "analytics", label: "Analytics", icon: <BarChart2 className="w-4 h-4" /> },
   ];
@@ -110,6 +112,7 @@ export default function AdminPage() {
         <div className="bg-white/95 rounded-2xl shadow-[0_18px_42px_rgba(25,48,88,0.10)] border border-[#d8e2f1] p-8">
           {activeTab === "patients" && <AdminPatients />}
           {activeTab === "caregivers" && <AdminCaregivers />}
+          {activeTab === "schedule" && <AdminSchedule />}
           {activeTab === "shifts" && <AdminShifts />}
           {activeTab === "analytics" && <AdminAnalytics />}
         </div>

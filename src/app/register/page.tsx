@@ -26,8 +26,10 @@ const roles: { value: Role; label: string; description: string; icon: React.Reac
 function RegisterForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const orgInviteCode = searchParams.get("orgInvite");
+  const urlOrgInviteCode = searchParams.get("orgInvite");
   const familyInviteCode = searchParams.get("familyInvite");
+  const [manualInviteCode, setManualInviteCode] = useState("");
+  const [orgInviteCode, setOrgInviteCode] = useState<string | null>(urlOrgInviteCode);
   const isInvited = !!(orgInviteCode || familyInviteCode);
   const [step, setStep] = useState<1 | 2>(isInvited ? 2 : 1);
   const [role, setRole] = useState<Role | null>(
@@ -39,6 +41,14 @@ function RegisterForm() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+
+  const handleUseInviteCode = () => {
+    const code = manualInviteCode.trim().toUpperCase();
+    if (!code) return;
+    setOrgInviteCode(code);
+    setRole("CAREGIVER");
+    setStep(2);
+  };
 
   const handleRoleSelect = (selectedRole: Role) => {
     setRole(selectedRole);
@@ -162,13 +172,32 @@ function RegisterForm() {
                   </Link>
                 </p>
 
-                {/* Caregiver & company callouts */}
-                <div className="mt-4 pt-4 border-t border-gray-100 space-y-2">
-                  <div className="flex items-start gap-2 p-3 bg-[#f8f9fb] rounded-xl">
-                    <Stethoscope className="w-4 h-4 text-gray-400 mt-0.5 flex-shrink-0" />
-                    <p className="text-sm text-gray-500">
-                      <strong className="text-gray-700">Professional caregiver?</strong> You should have received an invite email from your employer. Use that link to register.
-                    </p>
+                {/* Caregiver invite code entry */}
+                <div className="mt-4 pt-4 border-t border-gray-100 space-y-3">
+                  <div className="p-4 bg-[#f0f5fd] border border-[#d8e2f1] rounded-xl">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Stethoscope className="w-4 h-4 text-[#2f5f9f] flex-shrink-0" />
+                      <p className="text-sm font-semibold text-[#2f5f9f]">Professional caregiver?</p>
+                    </div>
+                    <p className="text-sm text-gray-600 mb-3">Enter the invite code from your employer&apos;s email:</p>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={manualInviteCode}
+                        onChange={(e) => setManualInviteCode(e.target.value.toUpperCase())}
+                        placeholder="e.g. ABC12345"
+                        className="flex-1 px-3 py-2 border-2 border-[#cdd9e9] rounded-lg bg-white focus:ring-2 focus:ring-[#2f5f9f] focus:border-[#2f5f9f] outline-none text-sm font-mono tracking-wider"
+                        onKeyDown={(e) => e.key === "Enter" && handleUseInviteCode()}
+                      />
+                      <button
+                        type="button"
+                        onClick={handleUseInviteCode}
+                        disabled={!manualInviteCode.trim()}
+                        className="px-4 py-2 bg-[#2f5f9f] text-white text-sm font-semibold rounded-lg hover:bg-[#224978] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                      >
+                        Continue
+                      </button>
+                    </div>
                   </div>
                   <div className="flex items-start gap-2 p-3 bg-[#f8f9fb] rounded-xl">
                     <Building2 className="w-4 h-4 text-gray-400 mt-0.5 flex-shrink-0" />

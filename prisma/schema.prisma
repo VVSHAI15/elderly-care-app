@@ -42,7 +42,10 @@ model User {
   notifications     Notification[]
   uploadedDocuments Document[]     @relation("UploadedDocuments")
   assignedTasks     Task[]         @relation("AssignedTasks")
-  caregiverShifts   Shift[]        @relation("CaregiverShifts")
+  caregiverShifts          Shift[]           @relation("CaregiverShifts")
+  scheduledShifts          ScheduledShift[]  @relation("CaregiverScheduledShifts")
+  shiftRequests            ShiftRequest[]    @relation("ShiftRequests")
+  coveredShiftRequests     ShiftRequest[]    @relation("CoveredShifts")
 }
 
 model Account {
@@ -118,8 +121,9 @@ model Patient {
   medications     Medication[]
   documents       Document[]
   inviteCodes     InviteCode[]
-  shifts          Shift[]
-  healthMetrics   HealthMetric[]
+  shifts           Shift[]
+  scheduledShifts  ScheduledShift[]
+  healthMetrics    HealthMetric[]
 }
 
 model InviteCode {
@@ -240,6 +244,49 @@ model Shift {
   createdAt   DateTime  @default(now())
 }
 
+model ScheduledShift {
+  id          String               @id @default(cuid())
+  caregiverId String
+  caregiver   User                 @relation("CaregiverScheduledShifts", fields: [caregiverId], references: [id])
+  patientId   String
+  patient     Patient              @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  startTime   DateTime
+  endTime     DateTime
+  status      ScheduledShiftStatus @default(SCHEDULED)
+  notes       String?
+  createdById String
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
+
+  requests      ShiftRequest[] @relation("ShiftRequests")
+  offerRequests ShiftRequest[] @relation("OfferedShifts")
+}
+
+model ShiftRequest {
+  id               String             @id @default(cuid())
+  requesterId      String
+  requester        User               @relation("ShiftRequests", fields: [requesterId], references: [id])
+  type             ShiftRequestType
+  status           ShiftRequestStatus @default(PENDING)
+
+  scheduledShiftId String?
+  scheduledShift   ScheduledShift?    @relation("ShiftRequests", fields: [scheduledShiftId], references: [id])
+
+  offeredShiftId   String?
+  offeredShift     ScheduledShift?    @relation("OfferedShifts", fields: [offeredShiftId], references: [id])
+
+  requestDate      DateTime?
+  coveredById      String?
+  coveredBy        User?              @relation("CoveredShifts", fields: [coveredById], references: [id])
+
+  message          String?
+  adminNote        String?
+  resolvedById     String?
+  resolvedAt       DateTime?
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+}
+
 model HealthMetric {
   id               String   @id @default(cuid())
   patientId        String
@@ -302,4 +349,28 @@ enum NotificationType {
   MEDICATION_REFILL
   APPOINTMENT_REMINDER
   SYSTEM
+  SHIFT_REQUEST
+  SHIFT_APPROVED
+  SHIFT_REJECTED
+  SHIFT_COVERED
+}
+
+enum ScheduledShiftStatus {
+  SCHEDULED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum ShiftRequestType {
+  DAY_OFF
+  COVER_REQUEST
+  SWAP_REQUEST
+}
+
+enum ShiftRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  FULFILLED
 }

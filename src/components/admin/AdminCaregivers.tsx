@@ -31,6 +31,8 @@ export function AdminCaregivers() {
   const [inviteLoading, setInviteLoading] = useState(false);
   const [inviteSuccess, setInviteSuccess] = useState("");
   const [inviteError, setInviteError] = useState("");
+  const [inviteResult, setInviteResult] = useState<{ code: string; inviteUrl: string } | null>(null);
+  const [copied, setCopied] = useState<"code" | "url" | null>(null);
 
   const fetchCaregivers = useCallback(async () => {
     try {
@@ -63,6 +65,7 @@ export function AdminCaregivers() {
         setInviteError(data.error || "Failed to send invite");
       } else {
         setInviteSuccess(`Invite sent to ${inviteEmail}`);
+        setInviteResult({ code: data.code, inviteUrl: data.inviteUrl });
         setInviteEmail("");
         setInviteName("");
         fetchCaregivers();
@@ -101,9 +104,38 @@ export function AdminCaregivers() {
             Send Email Invitation
           </h3>
           {inviteSuccess && (
-            <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-xl text-sm flex items-center gap-2 mb-4">
-              <CheckCircle2 className="w-4 h-4" />
-              {inviteSuccess}
+            <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-xl text-sm mb-4 space-y-3">
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 flex-shrink-0" />
+                <span>{inviteSuccess}</span>
+              </div>
+              {inviteResult && (
+                <div className="space-y-2 pt-1 border-t border-green-200">
+                  <p className="text-xs text-green-600 font-semibold">Share this code or link manually if the email doesn&apos;t arrive:</p>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-gray-500">Code:</span>
+                    <code className="flex-1 px-2 py-1 bg-white border border-green-300 rounded font-mono text-sm tracking-widest text-gray-900">{inviteResult.code}</code>
+                    <button
+                      type="button"
+                      onClick={() => { navigator.clipboard.writeText(inviteResult.code); setCopied("code"); setTimeout(() => setCopied(null), 2000); }}
+                      className="px-2 py-1 text-xs bg-green-100 hover:bg-green-200 text-green-700 rounded font-semibold transition-colors"
+                    >
+                      {copied === "code" ? "Copied!" : "Copy"}
+                    </button>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-gray-500">Link:</span>
+                    <code className="flex-1 px-2 py-1 bg-white border border-green-300 rounded text-xs text-gray-700 truncate">{inviteResult.inviteUrl}</code>
+                    <button
+                      type="button"
+                      onClick={() => { navigator.clipboard.writeText(inviteResult.inviteUrl); setCopied("url"); setTimeout(() => setCopied(null), 2000); }}
+                      className="px-2 py-1 text-xs bg-green-100 hover:bg-green-200 text-green-700 rounded font-semibold transition-colors"
+                    >
+                      {copied === "url" ? "Copied!" : "Copy"}
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
           {inviteError && (
@@ -144,7 +176,7 @@ export function AdminCaregivers() {
               </button>
               <button
                 type="button"
-                onClick={() => { setShowInvite(false); setInviteSuccess(""); setInviteError(""); }}
+                onClick={() => { setShowInvite(false); setInviteSuccess(""); setInviteError(""); setInviteResult(null); }}
                 className="px-5 py-2.5 border-2 border-gray-200 text-gray-700 font-semibold rounded-xl hover:bg-gray-50 transition-colors text-sm"
               >
                 Cancel

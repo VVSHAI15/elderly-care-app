@@ -3,7 +3,8 @@
 import { useState, useEffect, useCallback } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { Heart, Plus, Upload, LogOut, Loader2, Users, History, Pill, ArrowLeft, Activity, Clock, FileText } from "lucide-react";
+import { Heart, Plus, Upload, LogOut, Loader2, Users, History, Pill, ArrowLeft, Activity, Clock, FileText, CalendarClock } from "lucide-react";
+import Link from "next/link";
 import { signOut } from "next-auth/react";
 import { DocumentScanner } from "@/components/documents/DocumentScanner";
 import { TaskList } from "@/components/tasks/TaskList";
@@ -389,6 +390,13 @@ export default function DashboardPage() {
                     <Activity className="w-5 h-5" />
                     Vitals
                   </button>
+                  <Link
+                    href="/dashboard/schedule"
+                    className="px-5 py-3 rounded-xl font-semibold text-base transition-colors flex items-center gap-2 bg-white text-gray-800 hover:bg-[#eff5ff] border-2 border-[#d6e2f1]"
+                  >
+                    <CalendarClock className="w-5 h-5" />
+                    My Schedule
+                  </Link>
                 </>
               )}
               <button
