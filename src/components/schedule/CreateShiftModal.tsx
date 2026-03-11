@@ -10,8 +10,8 @@ interface Caregiver {
 }
 
 interface Patient {
-  id: string;
-  user: { name: string | null };
+  patientId: string;
+  name: string | null;
 }
 
 interface Props {
@@ -121,8 +121,8 @@ export function CreateShiftModal({ caregivers, patients, onClose, onCreated }: P
             >
               <option value="">Select patient…</option>
               {patients.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.user.name ?? p.id}
+                <option key={p.patientId} value={p.patientId}>
+                  {p.name ?? p.patientId}
                 </option>
               ))}
             </select>
