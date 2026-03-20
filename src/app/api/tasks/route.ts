@@ -4,22 +4,7 @@ import { authOptions } from "@/lib/auth/config";
 import prisma from "@/lib/db";
 import { notifyFamilyOfTaskCompletion, sendNotification } from "@/lib/notifications";
 import { pusherServer, getPatientChannel, PUSHER_EVENTS } from "@/lib/pusher";
-
-async function canAccessPatient(patientId: string, userId: string, role: string, orgId?: string | null) {
-  const patient = await prisma.patient.findUnique({
-    where: { id: patientId },
-    include: { familyMembers: { select: { id: true } } },
-  });
-  if (!patient) return false;
-  const isOwner = patient.userId === userId;
-  const isConnected = patient.familyMembers.some((f) => f.id === userId);
-  const isAdmin = role === "ADMIN";
-  const isOrgMember =
-    (role === "CAREGIVER" || role === "ADMIN") &&
-    orgId &&
-    (patient as unknown as { organizationId?: string | null }).organizationId === orgId;
-  return isOwner || isConnected || isAdmin || isOrgMember;
-}
+import { canAccessPatient } from "@/lib/access";
 
 export async function GET(request: NextRequest) {
   const session = await getServerSession(authOptions);

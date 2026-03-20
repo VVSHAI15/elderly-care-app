@@ -19,7 +19,6 @@ export async function GET(request: NextRequest) {
     include: {
       familyOf: {
         include: { user: { select: { name: true, email: true } } },
-        ...(patientId ? { where: { id: patientId } } : {}),
       },
     },
   });
@@ -28,7 +27,18 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "No connected patients found" }, { status: 404 });
   }
 
-  const patient = user.familyOf[0];
+  // If a specific patientId is requested, verify the user is actually connected to it
+  // Return 403 — do not silently fall back to another patient
+  let patient;
+  if (patientId) {
+    patient = user.familyOf.find((p) => p.id === patientId);
+    if (!patient) {
+      return NextResponse.json({ error: "Access denied" }, { status: 403 });
+    }
+  } else {
+    patient = user.familyOf[0];
+  }
+
   const now = new Date();
   const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
   const ninetyDaysAgo = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);

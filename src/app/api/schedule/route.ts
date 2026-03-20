@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth/config";
 import prisma from "@/lib/db";
+import { auditLog } from "@/lib/audit";
 
 // GET /api/schedule - List scheduled shifts
 // Query params: patientId, caregiverId, from, to, status
@@ -20,31 +21,49 @@ export async function GET(request: NextRequest) {
 
   const role = session.user.role;
 
-  // Build where clause based on role
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const where: any = {};
 
   if (role === "CAREGIVER") {
-    // Caregivers can only see their own shifts (or their org's open shifts)
+    // Caregivers only see their own shifts — no overrides allowed
     where.caregiverId = session.user.id;
   } else if (role === "PATIENT") {
-    // Patients see shifts for their own patient record
     const patient = await prisma.patient.findFirst({
       where: { userId: session.user.id },
     });
     if (patient) where.patientId = patient.id;
   } else if (role === "ADMIN") {
-    // Admins see all shifts in their org
     const admin = await prisma.user.findUnique({
       where: { id: session.user.id },
       select: { organizationId: true },
     });
-    if (admin?.organizationId) {
-      where.patient = { organizationId: admin.organizationId };
+    if (!admin?.organizationId) {
+      return NextResponse.json({ error: "Admin not associated with an organization" }, { status: 403 });
     }
-    // Allow further filtering
-    if (patientId) where.patientId = patientId;
-    if (caregiverId) where.caregiverId = caregiverId;
+
+    // Always scope to admin's org
+    where.patient = { organizationId: admin.organizationId };
+
+    // Additional filters — validate each belongs to admin's org before applying
+    if (patientId) {
+      const patient = await prisma.patient.findFirst({
+        where: { id: patientId, organizationId: admin.organizationId },
+      });
+      if (!patient) {
+        return NextResponse.json({ error: "Patient not found in your organization" }, { status: 403 });
+      }
+      where.patientId = patientId;
+    }
+
+    if (caregiverId) {
+      const caregiver = await prisma.user.findFirst({
+        where: { id: caregiverId, organizationId: admin.organizationId },
+      });
+      if (!caregiver) {
+        return NextResponse.json({ error: "Caregiver not found in your organization" }, { status: 403 });
+      }
+      where.caregiverId = caregiverId;
+    }
   }
 
   if (from || to) {
@@ -75,6 +94,9 @@ export async function POST(request: NextRequest) {
   if (session.user.role !== "ADMIN") {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
+  if (!session.user.organizationId) {
+    return NextResponse.json({ error: "Admin not associated with an organization" }, { status: 403 });
+  }
 
   const body = await request.json();
   const { caregiverId, patientId, startTime, endTime, notes } = body;
@@ -86,6 +108,22 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  // Validate patient belongs to admin's org
+  const patient = await prisma.patient.findFirst({
+    where: { id: patientId, organizationId: session.user.organizationId },
+  });
+  if (!patient) {
+    return NextResponse.json({ error: "Patient not found in your organization" }, { status: 403 });
+  }
+
+  // Validate caregiver belongs to admin's org
+  const caregiver = await prisma.user.findFirst({
+    where: { id: caregiverId, organizationId: session.user.organizationId },
+  });
+  if (!caregiver) {
+    return NextResponse.json({ error: "Caregiver not found in your organization" }, { status: 403 });
+  }
+
   const start = new Date(startTime);
   const end = new Date(endTime);
 
@@ -93,12 +131,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "endTime must be after startTime" }, { status: 400 });
   }
 
-  // Check caregiver overlap - same caregiver can't have two overlapping scheduled shifts
+  // Check caregiver overlap
   const caregiverConflict = await prisma.scheduledShift.findFirst({
     where: {
       caregiverId,
       status: { not: "CANCELLED" },
-      // Overlap: existing.start < new.end AND existing.end > new.start
       startTime: { lt: end },
       endTime: { gt: start },
     },
@@ -116,7 +153,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // Check patient overlap - same patient can't have two caregivers at the same time
+  // Check patient overlap
   const patientConflict = await prisma.scheduledShift.findFirst({
     where: {
       patientId,
@@ -151,6 +188,15 @@ export async function POST(request: NextRequest) {
       caregiver: { select: { id: true, name: true, email: true } },
       patient: { select: { id: true, user: { select: { name: true } } } },
     },
+  });
+
+  await auditLog({
+    userId: session.user.id,
+    action: "schedule.shift_created",
+    resourceId: shift.id,
+    resourceType: "scheduled_shift",
+    request,
+    metadata: { patientId, caregiverId },
   });
 
   return NextResponse.json(shift, { status: 201 });

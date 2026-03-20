@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth/config";
 import prisma from "@/lib/db";
 import { sendNotification } from "@/lib/notifications";
+import { auditLog } from "@/lib/audit";
 
 // PATCH /api/schedule/requests/[id]
 // Admin: approve or reject a request
@@ -19,7 +20,7 @@ export async function PATCH(
   const { id } = await params;
   const body = await request.json();
   const { action, adminNote, coveredById } = body;
-  // action: "approve" | "reject" | "volunteer" | "fulfill"
+  // action: "approve" | "reject" | "volunteer" | "assign_cover"
 
   const role = session.user.role;
 
@@ -29,7 +30,13 @@ export async function PATCH(
       requester: { select: { id: true, name: true } },
       scheduledShift: {
         include: {
-          patient: { select: { user: { select: { name: true } } } },
+          patient: {
+            select: {
+              id: true,
+              organizationId: true,
+              user: { select: { name: true } },
+            },
+          },
         },
       },
       offeredShift: true,
@@ -47,6 +54,14 @@ export async function PATCH(
     }
     if (shiftRequest.status !== "PENDING") {
       return NextResponse.json({ error: "Request is no longer pending" }, { status: 409 });
+    }
+
+    // Verify the shift request is for a patient in the admin's org
+    if (
+      shiftRequest.scheduledShift &&
+      shiftRequest.scheduledShift.patient.organizationId !== session.user.organizationId
+    ) {
+      return NextResponse.json({ error: "Access denied" }, { status: 403 });
     }
 
     const newStatus = action === "approve" ? "APPROVED" : "REJECTED";
@@ -70,7 +85,6 @@ export async function PATCH(
         });
 
         if (affectedShift && offeredShift) {
-          // Overlap check after swap
           const swapConflict1 = await prisma.scheduledShift.findFirst({
             where: {
               id: { notIn: [affectedShift.id, offeredShift.id] },
@@ -121,7 +135,14 @@ export async function PATCH(
       },
     });
 
-    // Notify the requester
+    await auditLog({
+      userId: session.user.id,
+      action: `shift_request.${action}`,
+      resourceId: id,
+      resourceType: "shift_request",
+      request,
+    });
+
     const notifType = action === "approve" ? "SHIFT_APPROVED" : "SHIFT_REJECTED";
     const labels: Record<string, string> = {
       DAY_OFF: "day-off request",
@@ -156,6 +177,14 @@ export async function PATCH(
       return NextResponse.json({ error: "You cannot cover your own request" }, { status: 400 });
     }
 
+    // Volunteer must be in the same org as the patient
+    if (
+      shiftRequest.scheduledShift &&
+      shiftRequest.scheduledShift.patient.organizationId !== session.user.organizationId
+    ) {
+      return NextResponse.json({ error: "Access denied" }, { status: 403 });
+    }
+
     // Check the volunteer has no conflict
     if (shiftRequest.scheduledShift) {
       const conflict = await prisma.scheduledShift.findFirst({
@@ -173,7 +202,6 @@ export async function PATCH(
         );
       }
 
-      // Reassign the shift to the covering caregiver
       await prisma.scheduledShift.update({
         where: { id: shiftRequest.scheduledShift.id },
         data: { caregiverId: session.user.id },
@@ -189,7 +217,6 @@ export async function PATCH(
       },
     });
 
-    // Notify the original requester and admins
     const volunteer = await prisma.user.findUnique({
       where: { id: session.user.id },
       select: { name: true },
@@ -218,6 +245,23 @@ export async function PATCH(
         { error: "Request must be approved before assigning a cover" },
         { status: 409 }
       );
+    }
+
+    // Verify the shift request is for a patient in the admin's org
+    if (
+      shiftRequest.scheduledShift &&
+      shiftRequest.scheduledShift.patient.organizationId !== session.user.organizationId
+    ) {
+      return NextResponse.json({ error: "Access denied" }, { status: 403 });
+    }
+
+    // Verify the assigned caregiver is in the admin's org
+    const coverCaregiver = await prisma.user.findFirst({
+      where: { id: coveredById, organizationId: session.user.organizationId },
+      select: { name: true },
+    });
+    if (!coverCaregiver) {
+      return NextResponse.json({ error: "Caregiver not found in your organization" }, { status: 403 });
     }
 
     if (shiftRequest.scheduledShift) {
@@ -253,16 +297,20 @@ export async function PATCH(
       },
     });
 
-    const coveringCaregiver = await prisma.user.findUnique({
-      where: { id: coveredById },
-      select: { name: true },
+    await auditLog({
+      userId: session.user.id,
+      action: "shift_request.assign_cover",
+      resourceId: id,
+      resourceType: "shift_request",
+      request,
+      metadata: { coveredById },
     });
 
     await sendNotification({
       userId: shiftRequest.requesterId,
       type: "SHIFT_COVERED",
       title: "Your shift has been covered",
-      message: `${coveringCaregiver?.name} has been assigned to cover your shift.`,
+      message: `${coverCaregiver.name} has been assigned to cover your shift.`,
     });
     await sendNotification({
       userId: coveredById,

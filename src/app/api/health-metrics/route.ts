@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth/config";
 import prisma from "@/lib/db";
+import { canAccessPatient } from "@/lib/access";
+import { auditLog } from "@/lib/audit";
 
 const METRIC_UNITS: Record<string, string> = {
   blood_pressure: "mmHg",
@@ -27,6 +29,24 @@ export async function GET(request: NextRequest) {
   if (!patientId) {
     return NextResponse.json({ error: "patientId is required" }, { status: 400 });
   }
+
+  const allowed = await canAccessPatient(
+    patientId,
+    session.user.id,
+    session.user.role ?? "",
+    session.user.organizationId
+  );
+  if (!allowed) {
+    return NextResponse.json({ error: "Access denied" }, { status: 403 });
+  }
+
+  await auditLog({
+    userId: session.user.id,
+    action: "health_metric.read",
+    resourceId: patientId,
+    resourceType: "patient",
+    request,
+  });
 
   const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
 
@@ -74,6 +94,16 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "patientId, type, and value are required" }, { status: 400 });
   }
 
+  const allowed = await canAccessPatient(
+    patientId,
+    session.user.id,
+    session.user.role ?? "",
+    session.user.organizationId
+  );
+  if (!allowed) {
+    return NextResponse.json({ error: "Access denied" }, { status: 403 });
+  }
+
   const metric = await prisma.healthMetric.create({
     data: {
       patientId,
@@ -84,6 +114,15 @@ export async function POST(request: NextRequest) {
       recordedById: session.user.id,
       notes,
     },
+  });
+
+  await auditLog({
+    userId: session.user.id,
+    action: "health_metric.create",
+    resourceId: patientId,
+    resourceType: "patient",
+    request,
+    metadata: { metricId: metric.id, type },
   });
 
   return NextResponse.json(metric);

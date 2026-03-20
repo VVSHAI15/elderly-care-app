@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth/config";
 import prisma from "@/lib/db";
+import { auditLog } from "@/lib/audit";
 
 // GET /api/shifts - Get active shift or recent shifts for current caregiver
 export async function GET(request: NextRequest) {
@@ -13,7 +14,7 @@ export async function GET(request: NextRequest) {
   const { searchParams } = request.nextUrl;
   const patientId = searchParams.get("patientId");
 
-  // Get active (open) shift
+  // Get active (open) shift — always scoped to the session caregiver
   const activeShift = await prisma.shift.findFirst({
     where: {
       caregiverId: session.user.id,
@@ -54,6 +55,19 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Patient ID is required" }, { status: 400 });
   }
 
+  // Verify caregiver is authorized to work with this patient (same org)
+  const patient = await prisma.patient.findFirst({
+    where: {
+      id: patientId,
+      ...(session.user.organizationId
+        ? { organizationId: session.user.organizationId }
+        : { userId: session.user.id }),
+    },
+  });
+  if (!patient) {
+    return NextResponse.json({ error: "Access denied" }, { status: 403 });
+  }
+
   // Prevent double clock-in for same patient
   const existingActive = await prisma.shift.findFirst({
     where: { caregiverId: session.user.id, patientId, clockOut: null },
@@ -73,6 +87,15 @@ export async function POST(request: NextRequest) {
     },
   });
 
+  await auditLog({
+    userId: session.user.id,
+    action: "shift.clock_in",
+    resourceId: shift.id,
+    resourceType: "shift",
+    request,
+    metadata: { patientId },
+  });
+
   return NextResponse.json(shift);
 }
 
@@ -88,6 +111,7 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ error: "Shift ID is required" }, { status: 400 });
   }
 
+  // Verify the shift belongs to this caregiver and is still open
   const shift = await prisma.shift.findFirst({
     where: { id: shiftId, caregiverId: session.user.id, clockOut: null },
   });
@@ -98,6 +122,15 @@ export async function PATCH(request: NextRequest) {
   const updated = await prisma.shift.update({
     where: { id: shiftId },
     data: { clockOut: new Date(), notes },
+  });
+
+  await auditLog({
+    userId: session.user.id,
+    action: "shift.clock_out",
+    resourceId: shiftId,
+    resourceType: "shift",
+    request,
+    metadata: { patientId: shift.patientId },
   });
 
   return NextResponse.json(updated);

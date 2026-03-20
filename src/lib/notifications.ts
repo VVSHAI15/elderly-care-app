@@ -21,7 +21,7 @@ function getEmailTransporter(): nodemailer.Transporter | null {
 interface NotificationPayload {
   userId: string;
   taskId?: string;
-  type: "TASK_REMINDER" | "TASK_COMPLETED" | "TASK_OVERDUE" | "MEDICATION_REFILL" | "APPOINTMENT_REMINDER" | "SYSTEM" | "SHIFT_REQUEST" | "SHIFT_APPROVED" | "SHIFT_REJECTED" | "SHIFT_COVERED";
+  type: "TASK_REMINDER" | "TASK_COMPLETED" | "TASK_OVERDUE" | "MEDICATION_REFILL" | "APPOINTMENT_REMINDER" | "SYSTEM" | "SHIFT_REQUEST" | "SHIFT_APPROVED" | "SHIFT_REJECTED" | "SHIFT_COVERED" | "CARE_REQUEST" | "CARE_REQUEST_HANDLED";
   title: string;
   message: string;
 }
@@ -61,21 +61,30 @@ export async function sendNotification(payload: NotificationPayload) {
   });
 
   // Send email notification
+  // PHI-safe: subject and preview must never contain patient names, diagnoses,
+  // medication names, or other protected health information.
   const emailTransporter = getEmailTransporter();
   if (notification.user.email && emailTransporter) {
     try {
       await emailTransporter.sendMail({
-        from: `"guardian.ai" <${process.env.EMAIL_USER}>`,
+        from: `"Guardian.ai" <${process.env.EMAIL_USER}>`,
         to: notification.user.email,
-        subject: title,
+        subject: "You have a new notification from Guardian.ai",
         html: `
           <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-            <h2 style="color: #2563eb;">${title}</h2>
-            <p style="color: #374151; font-size: 16px;">${message}</p>
+            <h2 style="color: #2f5f9f;">You have a new notification</h2>
+            <p style="color: #374151; font-size: 16px;">
+              Please log in to Guardian.ai to view the details of this notification.
+            </p>
+            <div style="margin: 24px 0;">
+              <a href="${process.env.NEXT_PUBLIC_APP_URL}/dashboard"
+                 style="background: #2f5f9f; color: white; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-size: 16px;">
+                View in Guardian.ai
+              </a>
+            </div>
             <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 20px 0;" />
-            <p style="color: #6b7280; font-size: 14px;">
-              This notification was sent from guardian.ai.
-              <a href="${process.env.NEXT_PUBLIC_APP_URL}/dashboard">View Dashboard</a>
+            <p style="color: #6b7280; font-size: 12px;">
+              This email was sent from Guardian.ai. Do not reply to this email.
             </p>
           </div>
         `,

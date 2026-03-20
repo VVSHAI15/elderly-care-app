@@ -124,6 +124,7 @@ model Patient {
   shifts           Shift[]
   scheduledShifts  ScheduledShift[]
   healthMetrics    HealthMetric[]
+  careRequests     CareRequest[]
 }
 
 model InviteCode {
@@ -353,6 +354,32 @@ enum NotificationType {
   SHIFT_APPROVED
   SHIFT_REJECTED
   SHIFT_COVERED
+  CARE_REQUEST
+  CARE_REQUEST_HANDLED
+}
+
+model CareRequest {
+  id            String            @id @default(cuid())
+  patientId     String
+  patient       Patient           @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  requestedById String
+  requestedDate DateTime
+  startTime     String
+  endTime       String
+  urgency       String            @default("NORMAL")
+  notes         String?
+  status        CareRequestStatus @default(PENDING)
+  adminNote     String?
+  handledById   String?
+  handledAt     DateTime?
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+}
+
+enum CareRequestStatus {
+  PENDING
+  SCHEDULED
+  DECLINED
 }
 
 enum ScheduledShiftStatus {
@@ -373,4 +400,16 @@ enum ShiftRequestStatus {
   APPROVED
   REJECTED
   FULFILLED
+}
+
+model AuditLog {
+  id           String   @id @default(cuid())
+  userId       String
+  action       String   // e.g. "health_metric.read", "shift.clock_in", "document.upload"
+  resourceId   String?  // ID of the resource being accessed
+  resourceType String?  // "patient", "shift", "document", "health_metric", etc.
+  ipAddress    String?
+  userAgent    String?
+  metadata     Json?    // additional context (non-PHI only)
+  createdAt    DateTime @default(now())
 }
