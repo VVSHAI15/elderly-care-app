@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth/config";
 import prisma from "@/lib/db";
 import bcrypt from "bcryptjs";
+import { auditLog } from "@/lib/audit";
 
 // GET /api/admin/patients - List all org patients with summary
 export async function GET() {
@@ -104,6 +105,15 @@ export async function POST(request: NextRequest) {
       },
     });
     return { user, patient };
+  });
+
+  await auditLog({
+    userId: session.user.id,
+    action: "PATIENT_CREATED",
+    resourceType: "Patient",
+    resourceId: result.patient.id,
+    request,
+    metadata: { patientEmail: email, patientName: name, organizationId: session.user.organizationId },
   });
 
   return NextResponse.json({

@@ -35,6 +35,11 @@ export const authOptions: NextAuthOptions = {
           throw new Error("Invalid email or password");
         }
 
+        // Audit log login (fire-and-forget, never block auth)
+        prisma.auditLog.create({
+          data: { userId: user.id, action: "LOGIN", resourceType: "User", resourceId: user.id },
+        }).catch(() => {});
+
         return {
           id: user.id,
           email: user.email,

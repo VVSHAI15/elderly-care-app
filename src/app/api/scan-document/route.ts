@@ -2,6 +2,18 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth/config";
 import OpenAI from "openai";
+import { auditLog } from "@/lib/audit";
+
+const ALLOWED_TYPES = new Set([
+  "application/pdf",
+  "image/jpeg",
+  "image/jpg",
+  "image/png",
+  "image/webp",
+  "image/heic",
+  "image/heif",
+]);
+const MAX_FILE_SIZE_BYTES = 20 * 1024 * 1024; // 20 MB
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -143,7 +155,23 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const isPdf = file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
+  // File type validation
+  const detectedType = file.type || "";
+  const isPdf = detectedType === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
+  if (!ALLOWED_TYPES.has(detectedType) && !isPdf) {
+    return NextResponse.json(
+      { error: "Invalid file type. Only PDF and image files are accepted." },
+      { status: 400 }
+    );
+  }
+
+  // File size validation
+  if (file.size > MAX_FILE_SIZE_BYTES) {
+    return NextResponse.json(
+      { error: "File too large. Maximum size is 20 MB." },
+      { status: 400 }
+    );
+  }
 
   console.log(`=== SCAN DOCUMENT ${isPdf ? "(PDF)" : "(IMAGE)"} ===`);
   console.log("File:", file.name, file.type, file.size, "bytes");
@@ -180,6 +208,14 @@ export async function POST(request: NextRequest) {
 
     console.log("GPT response:", responseContent);
     const parsedResult = parseGptResponse(responseContent);
+
+    await auditLog({
+      userId: session.user.id,
+      action: "DOCUMENT_SCANNED",
+      resourceType: "Document",
+      request,
+      metadata: { patientId, fileName: file.name, fileType: file.type, fileSize: file.size },
+    });
 
     return NextResponse.json({
       fileName: file.name,

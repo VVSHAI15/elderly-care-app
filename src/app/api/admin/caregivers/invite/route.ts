@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth/config";
 import prisma from "@/lib/db";
 import nodemailer from "nodemailer";
+import { auditLog } from "@/lib/audit";
 
 function generateCode(length = 8) {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -76,6 +77,15 @@ export async function POST(request: NextRequest) {
     console.error("Failed to send invite email:", emailError);
     // Don't fail — code is still saved
   }
+
+  await auditLog({
+    userId: session.user.id,
+    action: "CAREGIVER_INVITED",
+    resourceType: "InviteCode",
+    resourceId: code,
+    request,
+    metadata: { targetEmail: email, organizationId: session.user.organizationId },
+  });
 
   return NextResponse.json({ message: "Invite sent", code, inviteUrl });
 }

@@ -7,6 +7,7 @@ import { createTasksFromCareProfile } from "@/lib/care-profile-tasks";
 import { getAllAllergyConflicts } from "@/lib/drug-allergy-check";
 import { findProtocolsForConditions } from "@/lib/condition-protocols";
 import { createTasksFromProtocol } from "@/lib/care-profile-tasks";
+import { auditLog } from "@/lib/audit";
 
 export async function POST(request: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -289,6 +290,21 @@ export async function POST(request: NextRequest) {
       }
     }
     // ────────────────────────────────────────────────────────────────────────
+
+    await auditLog({
+      userId: session.user.id,
+      action: "DOCUMENT_CONFIRMED",
+      resourceType: "Document",
+      resourceId: document.id,
+      request,
+      metadata: {
+        patientId,
+        fileName,
+        documentType,
+        medicationsCreated: createdMedications.length,
+        vitalsSaved,
+      },
+    });
 
     return NextResponse.json({
       document,

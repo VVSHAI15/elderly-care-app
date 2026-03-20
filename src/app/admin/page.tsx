@@ -11,6 +11,7 @@ import { AdminPatients } from "@/components/admin/AdminPatients";
 import { AdminShifts } from "@/components/admin/AdminShifts";
 import { AdminAnalytics } from "@/components/admin/AdminAnalytics";
 import { AdminSchedule } from "@/components/admin/AdminSchedule";
+import { ChatWidget } from "@/components/chat/ChatWidget";
 
 type Tab = "caregivers" | "patients" | "shifts" | "schedule" | "analytics";
 
@@ -117,6 +118,7 @@ export default function AdminPage() {
           {activeTab === "analytics" && <AdminAnalytics />}
         </div>
       </main>
+      <ChatWidget role="ADMIN" />
     </div>
   );
 }

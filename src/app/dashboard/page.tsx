@@ -19,6 +19,7 @@ import { ClockInOut } from "@/components/caregiver/ClockInOut";
 import { HealthMetricLogger } from "@/components/caregiver/HealthMetricLogger";
 import { CareProfileView } from "@/components/patient/CareProfileView";
 import { EditCareProfileModal } from "@/components/patient/EditCareProfileModal";
+import { ChatWidget } from "@/components/chat/ChatWidget";
 import type { CareProfile } from "@/types/care-profile";
 
 interface PatientData {
@@ -632,6 +633,7 @@ export default function DashboardPage() {
           </>
         )}
       </main>
+      <ChatWidget role={session?.user?.role} />
     </div>
   );
 }

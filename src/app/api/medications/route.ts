@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth/config";
 import prisma from "@/lib/db";
+import { auditLog } from "@/lib/audit";
 
 async function canAccessPatient(patientId: string, userId: string, role: string, orgId?: string | null) {
   const patient = await prisma.patient.findUnique({
@@ -85,6 +86,15 @@ export async function PATCH(request: NextRequest) {
   const updated = await prisma.medication.update({
     where: { id },
     data: updateData,
+  });
+
+  await auditLog({
+    userId: session.user.id,
+    action: "MEDICATION_UPDATED",
+    resourceType: "Medication",
+    resourceId: id,
+    request,
+    metadata: { patientId: medication.patientId, fields: Object.keys(updateData) },
   });
 
   return NextResponse.json(updated);
