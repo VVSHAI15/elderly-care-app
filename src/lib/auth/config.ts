@@ -36,9 +36,11 @@ export const authOptions: NextAuthOptions = {
         }
 
         // Audit log login (fire-and-forget, never block auth)
-        prisma.auditLog.create({
-          data: { userId: user.id, action: "LOGIN", resourceType: "User", resourceId: user.id },
-        }).catch(() => {});
+        try {
+          prisma.auditLog.create({
+            data: { userId: user.id, action: "LOGIN", resourceType: "User", resourceId: user.id },
+          }).catch(() => {});
+        } catch { /* never block auth */ }
 
         return {
           id: user.id,
