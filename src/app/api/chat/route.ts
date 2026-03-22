@@ -32,8 +32,7 @@ const tools: OpenAI.Chat.Completions.ChatCompletionTool[] = [
     type: "function",
     function: {
       name: "get_open_shifts",
-      description:
-        "Get shifts that need coverage — missed or marked as needing a replacement.",
+      description: "Get shifts that need coverage — missed or marked as needing a replacement.",
       parameters: { type: "object", properties: {} },
     },
   },
@@ -41,7 +40,7 @@ const tools: OpenAI.Chat.Completions.ChatCompletionTool[] = [
     type: "function",
     function: {
       name: "get_caregivers",
-      description: "List caregivers in the organization with their current working status.",
+      description: "List all caregivers in the organization with their current working status.",
       parameters: { type: "object", properties: {} },
     },
   },
@@ -51,6 +50,22 @@ const tools: OpenAI.Chat.Completions.ChatCompletionTool[] = [
       name: "get_patients",
       description: "List patients in the organization with assigned caregivers.",
       parameters: { type: "object", properties: {} },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "get_available_caregivers",
+      description:
+        "Find caregivers who have no scheduled shifts during a given time window — i.e. who is free at a certain time.",
+      parameters: {
+        type: "object",
+        properties: {
+          startTime: { type: "string", description: "Window start as ISO datetime, e.g. 2026-03-22T09:00:00" },
+          endTime: { type: "string", description: "Window end as ISO datetime, e.g. 2026-03-22T13:00:00" },
+        },
+        required: ["startTime", "endTime"],
+      },
     },
   },
   {
@@ -66,6 +81,42 @@ const tools: OpenAI.Chat.Completions.ChatCompletionTool[] = [
             description: "Patient ID — omit for all patients you can access",
           },
         },
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "reschedule_shift",
+      description:
+        "Move a scheduled shift to a new date/time. Optionally reassign it to a different caregiver at the same time.",
+      parameters: {
+        type: "object",
+        properties: {
+          shiftId: { type: "string", description: "The shift ID to reschedule" },
+          newStartTime: { type: "string", description: "New start time as ISO datetime" },
+          newEndTime: { type: "string", description: "New end time as ISO datetime" },
+          newCaregiverId: {
+            type: "string",
+            description: "Reassign to a different caregiver ID (optional — keep same caregiver if omitted)",
+          },
+        },
+        required: ["shiftId", "newStartTime", "newEndTime"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "reassign_shift",
+      description: "Assign an existing shift to a different caregiver without changing the time.",
+      parameters: {
+        type: "object",
+        properties: {
+          shiftId: { type: "string", description: "The shift ID to reassign" },
+          caregiverId: { type: "string", description: "The new caregiver's user ID" },
+        },
+        required: ["shiftId", "caregiverId"],
       },
     },
   },
@@ -133,7 +184,7 @@ const tools: OpenAI.Chat.Completions.ChatCompletionTool[] = [
     type: "function",
     function: {
       name: "assign_caregiver_to_patient",
-      description: "Assign a caregiver to a patient so they can care for them. Use get_caregivers and get_patients to find IDs first if needed.",
+      description: "Assign a caregiver to a patient. Use get_caregivers and get_patients to find IDs first if needed.",
       parameters: {
         type: "object",
         properties: {
@@ -183,6 +234,7 @@ async function executeTool(
         endTime: s.endTime,
         status: s.status,
         caregiver: s.caregiver?.name ?? "Unassigned",
+        caregiverId: s.caregiver?.id ?? null,
         patient: s.patient?.user?.name ?? "Unknown",
         notes: s.notes,
       }));
@@ -249,8 +301,44 @@ async function executeTool(
       return patients.map((p) => ({
         id: p.id,
         name: p.user.name,
-        assignedCaregivers: p.familyMembers.map((c) => c.name),
+        assignedCaregivers: p.familyMembers.map((c) => ({ id: c.id, name: c.name })),
       }));
+    }
+
+    case "get_available_caregivers": {
+      if (!orgId) return { error: "No organization found" };
+      const windowStart = new Date(args.startTime as string);
+      const windowEnd = new Date(args.endTime as string);
+
+      // Find caregivers with a conflicting scheduled shift in this window
+      const busyCaregiverIds = await prisma.scheduledShift.findMany({
+        where: {
+          patient: { organizationId: orgId },
+          status: { notIn: ["MISSED", "CANCELLED"] },
+          startTime: { lt: windowEnd },
+          endTime: { gt: windowStart },
+          caregiverId: { not: null },
+        },
+        select: { caregiverId: true },
+      });
+
+      const busyIds = new Set(busyCaregiverIds.map((s) => s.caregiverId).filter(Boolean));
+
+      const allCaregivers = await prisma.user.findMany({
+        where: { organizationId: orgId, role: "CAREGIVER" },
+        select: { id: true, name: true, email: true },
+      });
+
+      const available = allCaregivers.filter((c) => !busyIds.has(c.id));
+      const busy = allCaregivers.filter((c) => busyIds.has(c.id));
+
+      return {
+        windowStart,
+        windowEnd,
+        available: available.map((c) => ({ id: c.id, name: c.name })),
+        busy: busy.map((c) => ({ id: c.id, name: c.name })),
+        summary: `${available.length} caregiver(s) free, ${busy.length} caregiver(s) busy during this window.`,
+      };
     }
 
     case "get_today_tasks": {
@@ -289,6 +377,69 @@ async function executeTool(
         category: t.category,
         dueDate: t.dueDate,
       }));
+    }
+
+    case "reschedule_shift": {
+      if (role !== "ADMIN") return { error: "Only admins can reschedule shifts." };
+
+      const shift = await prisma.scheduledShift.findUnique({
+        where: { id: args.shiftId as string },
+        include: {
+          caregiver: { select: { name: true } },
+          patient: { include: { user: { select: { name: true } } } },
+        },
+      });
+      if (!shift) return { error: "Shift not found." };
+      if (shift.patient?.organizationId !== orgId) return { error: "Shift is not in your organization." };
+
+      const updateData: Record<string, unknown> = {
+        startTime: new Date(args.newStartTime as string),
+        endTime: new Date(args.newEndTime as string),
+      };
+      if (args.newCaregiverId) updateData.caregiverId = args.newCaregiverId;
+
+      const updated = await prisma.scheduledShift.update({
+        where: { id: args.shiftId as string },
+        data: updateData,
+        include: {
+          caregiver: { select: { name: true } },
+          patient: { include: { user: { select: { name: true } } } },
+        },
+      });
+
+      return {
+        success: true,
+        shiftId: updated.id,
+        message: `Shift for ${updated.patient?.user?.name ?? "patient"} moved to ${updated.startTime.toLocaleString()} – ${updated.endTime?.toLocaleString() ?? ""}. Assigned to: ${updated.caregiver?.name ?? "Unassigned"}.`,
+      };
+    }
+
+    case "reassign_shift": {
+      if (role !== "ADMIN") return { error: "Only admins can reassign shifts." };
+
+      const shift = await prisma.scheduledShift.findUnique({
+        where: { id: args.shiftId as string },
+        include: { patient: { select: { organizationId: true } } },
+      });
+      if (!shift) return { error: "Shift not found." };
+      if (shift.patient?.organizationId !== orgId) return { error: "Shift is not in your organization." };
+
+      const caregiver = await prisma.user.findUnique({
+        where: { id: args.caregiverId as string },
+        select: { name: true, role: true, organizationId: true },
+      });
+      if (!caregiver || caregiver.role !== "CAREGIVER") return { error: "Caregiver not found." };
+      if (caregiver.organizationId !== orgId) return { error: "Caregiver is not in your organization." };
+
+      await prisma.scheduledShift.update({
+        where: { id: args.shiftId as string },
+        data: { caregiverId: args.caregiverId as string, status: "SCHEDULED" },
+      });
+
+      return {
+        success: true,
+        message: `Shift reassigned to ${caregiver.name}.`,
+      };
     }
 
     case "report_callout": {
@@ -341,24 +492,20 @@ async function executeTool(
       return {
         success: true,
         shiftId,
-        message:
-          "Your callout has been recorded and the office has been notified. They will arrange coverage.",
+        message: "Your callout has been recorded and the office has been notified. They will arrange coverage.",
       };
     }
 
     case "create_patient": {
       if (role !== "ADMIN") return { error: "Only admins can create patients." };
       if (!orgId) return { error: "No organization found." };
-
-      const existing = await prisma.user.findUnique({ where: { email: args.email as string } });
-      if (existing) return { error: `A user with email ${args.email} already exists.` };
-
-      const tempPass = Math.random().toString(36).slice(-10);
-      const hashed = await bcrypt.hash(tempPass, 12);
-
-      const result = await prisma.$transaction(async (tx) => {
+      const existingP = await prisma.user.findUnique({ where: { email: args.email as string } });
+      if (existingP) return { error: `A user with email ${args.email} already exists.` };
+      const tempPassP = Math.random().toString(36).slice(-10);
+      const hashedP = await bcrypt.hash(tempPassP, 12);
+      const resultP = await prisma.$transaction(async (tx) => {
         const user = await tx.user.create({
-          data: { email: args.email as string, password: hashed, name: args.name as string, role: "PATIENT" },
+          data: { email: args.email as string, password: hashedP, name: args.name as string, role: "PATIENT" },
         });
         const patient = await tx.patient.create({
           data: {
@@ -371,73 +518,64 @@ async function executeTool(
         });
         return { user, patient };
       });
-
       return {
         success: true,
-        patientId: result.patient.id,
-        name: result.user.name,
-        email: result.user.email,
-        temporaryPassword: tempPass,
-        message: `Patient ${result.user.name} created. Temporary password: ${tempPass}`,
+        patientId: resultP.patient.id,
+        name: resultP.user.name,
+        email: resultP.user.email,
+        temporaryPassword: tempPassP,
+        message: `Patient ${resultP.user.name} created. Temporary login password: ${tempPassP}`,
       };
     }
 
     case "create_caregiver": {
       if (role !== "ADMIN") return { error: "Only admins can create caregivers." };
       if (!orgId) return { error: "No organization found." };
-
-      const existing = await prisma.user.findUnique({ where: { email: args.email as string } });
-      if (existing) return { error: `A user with email ${args.email} already exists.` };
-
-      const tempPass = Math.random().toString(36).slice(-10);
-      const hashed = await bcrypt.hash(tempPass, 12);
-
+      const existingC = await prisma.user.findUnique({ where: { email: args.email as string } });
+      if (existingC) return { error: `A user with email ${args.email} already exists.` };
+      const tempPassC = Math.random().toString(36).slice(-10);
+      const hashedC = await bcrypt.hash(tempPassC, 12);
       const caregiver = await prisma.user.create({
         data: {
           email: args.email as string,
-          password: hashed,
+          password: hashedC,
           name: args.name as string,
           role: "CAREGIVER",
           organizationId: orgId,
         },
       });
-
       return {
         success: true,
         caregiverId: caregiver.id,
         name: caregiver.name,
         email: caregiver.email,
-        temporaryPassword: tempPass,
-        message: `Caregiver ${caregiver.name} created. Temporary password: ${tempPass}`,
+        temporaryPassword: tempPassC,
+        message: `Caregiver ${caregiver.name} created. Temporary login password: ${tempPassC}`,
       };
     }
 
     case "assign_caregiver_to_patient": {
       if (role !== "ADMIN") return { error: "Only admins can assign caregivers." };
-
-      const patient = await prisma.patient.findUnique({
+      const patientA = await prisma.patient.findUnique({
         where: { id: args.patientId as string },
         select: { organizationId: true, familyMembers: { select: { id: true } } },
       });
-      if (!patient) return { error: "Patient not found." };
-      if (patient.organizationId !== orgId) return { error: "Patient is not in your organization." };
-
-      const caregiver = await prisma.user.findUnique({
+      if (!patientA) return { error: "Patient not found." };
+      if (patientA.organizationId !== orgId) return { error: "Patient is not in your organization." };
+      const caregiverA = await prisma.user.findUnique({
         where: { id: args.caregiverId as string },
         select: { organizationId: true, name: true, role: true },
       });
-      if (!caregiver || caregiver.role !== "CAREGIVER") return { error: "Caregiver not found." };
-      if (caregiver.organizationId !== orgId) return { error: "Caregiver is not in your organization." };
-
-      const alreadyAssigned = patient.familyMembers.some((m) => m.id === args.caregiverId);
-      if (alreadyAssigned) return { error: `${caregiver.name} is already assigned to this patient.` };
-
+      if (!caregiverA || caregiverA.role !== "CAREGIVER") return { error: "Caregiver not found." };
+      if (caregiverA.organizationId !== orgId) return { error: "Caregiver is not in your organization." };
+      if (patientA.familyMembers.some((m) => m.id === args.caregiverId)) {
+        return { error: `${caregiverA.name} is already assigned to this patient.` };
+      }
       await prisma.patient.update({
         where: { id: args.patientId as string },
         data: { familyMembers: { connect: { id: args.caregiverId as string } } },
       });
-
-      return { success: true, message: `${caregiver.name} has been assigned to the patient.` };
+      return { success: true, message: `${caregiverA.name} has been assigned to the patient.` };
     }
 
     default:
@@ -472,7 +610,7 @@ export async function POST(request: NextRequest) {
     : role === "FAMILY_MEMBER" ? "family member"
     : "patient";
 
-  const systemPrompt = `You are Guardian AI, a scheduling and support assistant for a home care agency. You help agency staff manage shifts, tasks, and care operations.
+  const systemPrompt = `You are Guardian AI, a scheduling and operations assistant for a home care agency. You help staff manage shifts, coverage, and care tasks.
 
 Today is ${today}.
 You are speaking with ${name ?? "a user"}, who is a ${roleLabel}.
@@ -480,12 +618,14 @@ You are speaking with ${name ?? "a user"}, who is a ${roleLabel}.
 Guidelines:
 - Never share one patient's data with another patient or unauthorized user.
 - For caregivers: only show their own shifts and assigned patients' tasks.
-- For admins: you can show org-wide scheduling data.
-- Family members and patients: you have limited scheduling tools — focus on support.
+- For admins: you can show org-wide scheduling data and take actions.
 - Keep responses concise and action-oriented. Use bullet points for lists.
 - If asked about medical advice, say you cannot provide that and suggest they contact the care team.
-- If a caregiver reports they cannot make a shift, use the report_callout tool.
-- Always confirm before taking any action (like reporting a callout).`;
+- When asked who is free or available at a time, use get_available_caregivers.
+- When asked to move or reschedule a shift, use reschedule_shift. Look up the shift ID via get_schedule first if needed.
+- When asked to reassign a shift to someone else, use reassign_shift.
+- When a caregiver reports they cannot make a shift, use report_callout.
+- Always confirm before taking any write action (reschedule, reassign, callout).`;
 
   const chatMessages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
     { role: "system", content: systemPrompt },
@@ -493,7 +633,7 @@ Guidelines:
   ];
 
   // Agentic loop — resolve tool calls until the model is done
-  for (let step = 0; step < 5; step++) {
+  for (let step = 0; step < 6; step++) {
     const response = await openai.chat.completions.create({
       model: "gpt-4o",
       messages: chatMessages,
@@ -508,7 +648,6 @@ Guidelines:
       return NextResponse.json({ reply: choice.message.content });
     }
 
-    // Execute all tool calls in parallel
     const toolResults = await Promise.all(
       (choice.message.tool_calls ?? []).map(async (tc) => {
         const args = JSON.parse(tc.function.arguments) as Record<string, unknown>;
