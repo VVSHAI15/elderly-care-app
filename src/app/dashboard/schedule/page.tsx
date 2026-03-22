@@ -153,7 +153,6 @@ export default function SchedulePage() {
         {/* Content */}
         {activeTab === "calendar" ? (
           <ScheduleCalendar
-            shifts={myShifts}
             onShiftClick={(shift) => setSelectedShift(shift)}
           />
         ) : (

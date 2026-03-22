@@ -141,7 +141,6 @@ export function AdminSchedule() {
       {/* Main content */}
       {activeTab === "calendar" ? (
         <ScheduleCalendar
-          shifts={shifts}
           onShiftClick={(s) => setSelectedShift(s)}
         />
       ) : (
