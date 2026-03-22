@@ -3,7 +3,7 @@
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useCallback } from "react";
-import { Heart, LogOut, Loader2, TrendingUp, Activity, Clock, CheckCircle2, Pill } from "lucide-react";
+import { Heart, LogOut, Loader2, TrendingUp, Activity, Clock, CheckCircle2, Pill, CalendarPlus, X, AlertTriangle } from "lucide-react";
 import { signOut } from "next-auth/react";
 import { NotificationBell } from "@/components/notifications/NotificationBell";
 import { TaskCompletionChart } from "@/components/family/TaskCompletionChart";
@@ -11,6 +11,7 @@ import { MedicationAdherenceChart } from "@/components/family/MedicationAdherenc
 import { HealthMetricsChart } from "@/components/family/HealthMetricsChart";
 import { VisitHistory } from "@/components/family/VisitHistory";
 import { ActivityFeed } from "@/components/family/ActivityFeed";
+import { ChatWidget } from "@/components/chat/ChatWidget";
 
 interface DashboardData {
   patient: { id: string; name: string | null; email: string };
@@ -28,6 +29,18 @@ interface ConnectedPatient {
   name: string | null;
 }
 
+interface CareRequest {
+  id: string;
+  requestedDate: string;
+  startTime: string;
+  endTime: string;
+  urgency: string;
+  notes: string | null;
+  status: "PENDING" | "SCHEDULED" | "DECLINED";
+  adminNote: string | null;
+  patient: { user: { name: string | null } };
+}
+
 export default function FamilyDashboardPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
@@ -35,6 +48,16 @@ export default function FamilyDashboardPage() {
   const [connectedPatients, setConnectedPatients] = useState<ConnectedPatient[]>([]);
   const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [showRequestModal, setShowRequestModal] = useState(false);
+  const [careRequests, setCareRequests] = useState<CareRequest[]>([]);
+  const [reqDate, setReqDate] = useState("");
+  const [reqStart, setReqStart] = useState("09:00");
+  const [reqEnd, setReqEnd] = useState("17:00");
+  const [reqUrgency, setReqUrgency] = useState<"NORMAL" | "URGENT">("NORMAL");
+  const [reqNotes, setReqNotes] = useState("");
+  const [reqLoading, setReqLoading] = useState(false);
+  const [reqSuccess, setReqSuccess] = useState(false);
+  const [reqError, setReqError] = useState("");
 
   useEffect(() => {
     if (status === "unauthenticated") router.push("/login");
@@ -64,7 +87,50 @@ export default function FamilyDashboardPage() {
       });
 
     fetchDashboard();
+
+    fetch("/api/family/care-requests")
+      .then((r) => r.json())
+      .then((d) => { if (d.requests) setCareRequests(d.requests); });
   }, [session, fetchDashboard]);
+
+  const handleSubmitRequest = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!dashData?.patient.id) return;
+    setReqLoading(true);
+    setReqError("");
+    try {
+      const res = await fetch("/api/family/care-requests", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          patientId: dashData.patient.id,
+          requestedDate: reqDate,
+          startTime: reqStart,
+          endTime: reqEnd,
+          urgency: reqUrgency,
+          notes: reqNotes,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setReqError(data.error || "Failed to submit request");
+      } else {
+        setReqSuccess(true);
+        setCareRequests((prev) => [data.careRequest, ...prev]);
+        setTimeout(() => {
+          setShowRequestModal(false);
+          setReqSuccess(false);
+          setReqDate("");
+          setReqNotes("");
+          setReqUrgency("NORMAL");
+        }, 1500);
+      }
+    } catch {
+      setReqError("Something went wrong. Please try again.");
+    } finally {
+      setReqLoading(false);
+    }
+  };
 
   if (status === "loading" || loading) {
     return (
@@ -90,6 +156,15 @@ export default function FamilyDashboardPage() {
               </span>
             </div>
             <div className="flex items-center gap-3">
+              {dashData && (
+                <button
+                  onClick={() => setShowRequestModal(true)}
+                  className="flex items-center gap-2 px-4 py-2.5 bg-[#2f5f9f] text-white font-semibold rounded-xl hover:bg-[#224978] transition-colors shadow-[0_6px_14px_rgba(47,95,159,0.25)] text-sm"
+                >
+                  <CalendarPlus className="w-4 h-4" />
+                  <span>Request Caregiver</span>
+                </button>
+              )}
               <NotificationBell userId={session.user.id} />
               <button
                 onClick={() => signOut({ callbackUrl: "/" })}
@@ -233,7 +308,153 @@ export default function FamilyDashboardPage() {
             </div>
           </div>
         )}
+        {/* My Care Requests */}
+        {careRequests.length > 0 && (
+          <div className="bg-white/95 rounded-2xl p-6 border border-[#d8e2f1] shadow-sm mt-6">
+            <div className="flex items-center gap-2 mb-4">
+              <CalendarPlus className="w-5 h-5 text-[#2f5f9f]" />
+              <h2 className="text-lg font-bold text-gray-900">My Care Requests</h2>
+            </div>
+            <div className="space-y-3">
+              {careRequests.map((r) => (
+                <div key={r.id} className="flex items-start justify-between p-4 rounded-xl border border-[#d8e2f1] bg-[#f8faff]">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold text-gray-900 text-sm">
+                        {new Date(r.requestedDate).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}
+                      </span>
+                      <span className="text-sm text-gray-500">{r.startTime} – {r.endTime}</span>
+                      {r.urgency === "URGENT" && (
+                        <span className="flex items-center gap-1 px-2 py-0.5 bg-red-100 text-red-700 text-xs font-semibold rounded-full">
+                          <AlertTriangle className="w-3 h-3" /> Urgent
+                        </span>
+                      )}
+                    </div>
+                    {r.notes && <p className="text-sm text-gray-600">{r.notes}</p>}
+                    {r.adminNote && <p className="text-sm text-[#2f5f9f] font-medium">Admin: {r.adminNote}</p>}
+                  </div>
+                  <span className={`px-3 py-1 rounded-full text-xs font-semibold flex-shrink-0 ml-4 ${
+                    r.status === "PENDING" ? "bg-amber-100 text-amber-700"
+                    : r.status === "SCHEDULED" ? "bg-green-100 text-green-700"
+                    : "bg-gray-100 text-gray-600"
+                  }`}>
+                    {r.status === "PENDING" ? "Pending" : r.status === "SCHEDULED" ? "Scheduled" : "Declined"}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </main>
+
+      {/* Request Caregiver Modal */}
+      {showRequestModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-2xl shadow-2xl border border-[#d8e2f1] w-full max-w-md p-8">
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <h2 className="text-xl font-bold text-gray-900">Request a Caregiver</h2>
+                <p className="text-sm text-gray-500 mt-0.5">The care team will be notified immediately.</p>
+              </div>
+              <button onClick={() => setShowRequestModal(false)} className="p-2 hover:bg-gray-100 rounded-xl transition-colors">
+                <X className="w-5 h-5 text-gray-500" />
+              </button>
+            </div>
+
+            {reqSuccess ? (
+              <div className="text-center py-8">
+                <CheckCircle2 className="w-14 h-14 text-green-500 mx-auto mb-3" />
+                <p className="text-lg font-bold text-gray-900">Request Submitted!</p>
+                <p className="text-sm text-gray-500 mt-1">The care team has been notified.</p>
+              </div>
+            ) : (
+              <form onSubmit={handleSubmitRequest} className="space-y-5">
+                {reqError && (
+                  <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl text-sm">{reqError}</div>
+                )}
+
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1.5">Date Needed</label>
+                  <input
+                    type="date"
+                    value={reqDate}
+                    onChange={(e) => setReqDate(e.target.value)}
+                    min={new Date().toISOString().split("T")[0]}
+                    required
+                    className="w-full px-3 py-2.5 border-2 border-[#cdd9e9] rounded-xl bg-white focus:ring-2 focus:ring-[#2f5f9f] focus:border-[#2f5f9f] outline-none text-sm"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-1.5">Start Time</label>
+                    <input
+                      type="time"
+                      value={reqStart}
+                      onChange={(e) => setReqStart(e.target.value)}
+                      required
+                      className="w-full px-3 py-2.5 border-2 border-[#cdd9e9] rounded-xl bg-white focus:ring-2 focus:ring-[#2f5f9f] outline-none text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-1.5">End Time</label>
+                    <input
+                      type="time"
+                      value={reqEnd}
+                      onChange={(e) => setReqEnd(e.target.value)}
+                      required
+                      className="w-full px-3 py-2.5 border-2 border-[#cdd9e9] rounded-xl bg-white focus:ring-2 focus:ring-[#2f5f9f] outline-none text-sm"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1.5">Urgency</label>
+                  <div className="flex gap-3">
+                    {(["NORMAL", "URGENT"] as const).map((u) => (
+                      <button
+                        key={u}
+                        type="button"
+                        onClick={() => setReqUrgency(u)}
+                        className={`flex-1 py-2.5 rounded-xl text-sm font-semibold border-2 transition-colors ${
+                          reqUrgency === u
+                            ? u === "URGENT"
+                              ? "bg-red-50 border-red-400 text-red-700"
+                              : "bg-[#f0f5fd] border-[#2f5f9f] text-[#2f5f9f]"
+                            : "border-[#cdd9e9] text-gray-600 hover:bg-gray-50"
+                        }`}
+                      >
+                        {u === "URGENT" ? "🚨 Urgent" : "Normal"}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1.5">Additional Notes <span className="font-normal text-gray-400">(optional)</span></label>
+                  <textarea
+                    value={reqNotes}
+                    onChange={(e) => setReqNotes(e.target.value)}
+                    placeholder="e.g. Need help with bathing and medication, doctor appointment at 2pm..."
+                    rows={3}
+                    className="w-full px-3 py-2.5 border-2 border-[#cdd9e9] rounded-xl bg-white focus:ring-2 focus:ring-[#2f5f9f] focus:border-[#2f5f9f] outline-none text-sm resize-none"
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={reqLoading || !reqDate}
+                  className="w-full py-3.5 bg-[#2f5f9f] text-white font-semibold rounded-xl hover:bg-[#224978] transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {reqLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <CalendarPlus className="w-4 h-4" />}
+                  Submit Request
+                </button>
+              </form>
+            )}
+          </div>
+        </div>
+      )}
+      <ChatWidget role="FAMILY_MEMBER" />
     </div>
   );
 }

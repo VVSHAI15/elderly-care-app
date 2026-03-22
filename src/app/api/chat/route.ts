@@ -195,6 +195,71 @@ const tools: OpenAI.Chat.Completions.ChatCompletionTool[] = [
       },
     },
   },
+  {
+    type: "function",
+    function: {
+      name: "get_my_patient_status",
+      description:
+        "For family members and patients: get a full status overview for their connected patient — today's tasks, upcoming visits, recent visit history, and active medications. Use this when they ask 'how is my mom', 'what happened today', 'any updates', etc.",
+      parameters: { type: "object", properties: {} },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "get_upcoming_visits",
+      description:
+        "For family members and patients: see upcoming scheduled caregiver visits for their connected patient.",
+      parameters: {
+        type: "object",
+        properties: {
+          days: { type: "number", description: "How many days ahead to look (default 7)" },
+        },
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "get_medications",
+      description:
+        "Get the active medication list for a connected patient. Respects family visibility settings.",
+      parameters: {
+        type: "object",
+        properties: {
+          patientId: { type: "string", description: "Patient ID — auto-detected for family/patient if omitted" },
+        },
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "submit_care_request",
+      description:
+        "Family member submits a request for additional caregiver coverage for their loved one on a specific date.",
+      parameters: {
+        type: "object",
+        properties: {
+          requestedDate: { type: "string", description: "Date of requested care YYYY-MM-DD" },
+          startTime: { type: "string", description: "Start time e.g. '09:00 AM'" },
+          endTime: { type: "string", description: "End time e.g. '01:00 PM'" },
+          urgency: { type: "string", enum: ["NORMAL", "URGENT"], description: "Urgency level (default NORMAL)" },
+          notes: { type: "string", description: "Any additional notes or reason for the request (optional)" },
+        },
+        required: ["requestedDate", "startTime", "endTime"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "get_care_requests",
+      description:
+        "Get submitted care requests. For family members: shows their own requests and status. For admins: shows all pending requests in the org.",
+      parameters: { type: "object", properties: {} },
+    },
+  },
 ];
 
 // ── Tool execution ───────────────────────────────────────────────────────────
@@ -496,6 +561,252 @@ async function executeTool(
       };
     }
 
+    case "get_my_patient_status": {
+      // Works for FAMILY_MEMBER and PATIENT
+      let patientIds: string[] = [];
+
+      if (role === "PATIENT") {
+        const p = await prisma.patient.findUnique({ where: { userId }, select: { id: true } });
+        if (p) patientIds = [p.id];
+      } else {
+        const u = await prisma.user.findUnique({
+          where: { id: userId },
+          select: { familyOf: { select: { id: true } } },
+        });
+        patientIds = u?.familyOf.map((p) => p.id) ?? [];
+      }
+
+      if (patientIds.length === 0) return { error: "No connected patients found." };
+
+      const today = new Date(); today.setHours(0, 0, 0, 0);
+      const tomorrow = new Date(today); tomorrow.setDate(tomorrow.getDate() + 1);
+      const weekOut = new Date(today); weekOut.setDate(weekOut.getDate() + 7);
+
+      const patients = await prisma.patient.findMany({
+        where: { id: { in: patientIds } },
+        include: {
+          user: { select: { name: true } },
+          tasks: {
+            where: { dueDate: { gte: today, lt: tomorrow } },
+            select: { title: true, status: true, category: true, priority: true },
+          },
+          medications: {
+            where: { isActive: true },
+            select: { name: true, dosage: true, frequency: true },
+          },
+          scheduledShifts: {
+            where: { startTime: { gte: today, lte: weekOut } },
+            include: { caregiver: { select: { name: true } } },
+            orderBy: { startTime: "asc" },
+            take: 5,
+          },
+        },
+      });
+
+      return patients.map((p) => ({
+        name: p.user.name,
+        todayTasks: {
+          total: p.tasks.length,
+          completed: p.tasks.filter((t) => t.status === "COMPLETED").length,
+          pending: p.tasks.filter((t) => ["PENDING", "IN_PROGRESS"].includes(t.status)).length,
+          overdue: p.tasks.filter((t) => t.status === "OVERDUE").length,
+          items: p.tasks,
+        },
+        activeMedications: p.medications.length,
+        medications: p.medications,
+        upcomingVisits: p.scheduledShifts.map((s) => ({
+          date: s.startTime,
+          endTime: s.endTime,
+          caregiver: s.caregiver?.name ?? "TBD",
+          status: s.status,
+        })),
+      }));
+    }
+
+    case "get_upcoming_visits": {
+      let patientIds: string[] = [];
+      if (role === "PATIENT") {
+        const p = await prisma.patient.findUnique({ where: { userId }, select: { id: true } });
+        if (p) patientIds = [p.id];
+      } else if (role === "FAMILY_MEMBER") {
+        const u = await prisma.user.findUnique({
+          where: { id: userId },
+          select: { familyOf: { select: { id: true } } },
+        });
+        patientIds = u?.familyOf.map((p) => p.id) ?? [];
+      } else if (orgId) {
+        // Admin/caregiver fall through to get_schedule instead
+        return { error: "Use get_schedule for admin or caregiver shift queries." };
+      }
+
+      if (patientIds.length === 0) return { error: "No connected patients found." };
+
+      const days = (args.days as number) ?? 7;
+      const from = new Date();
+      const to = new Date(Date.now() + days * 24 * 60 * 60 * 1000);
+
+      const visits = await prisma.scheduledShift.findMany({
+        where: { patientId: { in: patientIds }, startTime: { gte: from, lte: to } },
+        include: {
+          caregiver: { select: { name: true } },
+          patient: { include: { user: { select: { name: true } } } },
+        },
+        orderBy: { startTime: "asc" },
+        take: 20,
+      });
+
+      return visits.map((v) => ({
+        id: v.id,
+        patient: v.patient?.user?.name ?? "Unknown",
+        caregiver: v.caregiver?.name ?? "TBD",
+        startTime: v.startTime,
+        endTime: v.endTime,
+        status: v.status,
+      }));
+    }
+
+    case "get_medications": {
+      let patientId = args.patientId as string | undefined;
+
+      if (!patientId) {
+        if (role === "PATIENT") {
+          const p = await prisma.patient.findUnique({ where: { userId }, select: { id: true } });
+          patientId = p?.id;
+        } else if (role === "FAMILY_MEMBER") {
+          const u = await prisma.user.findUnique({
+            where: { id: userId },
+            select: { familyOf: { select: { id: true } } },
+          });
+          patientId = u?.familyOf[0]?.id;
+        }
+      }
+
+      if (!patientId) return { error: "No patient found." };
+
+      // Check family visibility permission
+      if (role === "FAMILY_MEMBER") {
+        const patient = await prisma.patient.findUnique({
+          where: { id: patientId },
+          select: { familyCanViewMeds: true, familyMembers: { select: { id: true } } },
+        });
+        if (!patient) return { error: "Patient not found." };
+        if (!patient.familyMembers.some((m) => m.id === userId)) return { error: "Access denied." };
+        if (!patient.familyCanViewMeds) return { error: "Medication visibility is not enabled for family members. Please contact the agency." };
+      }
+
+      const meds = await prisma.medication.findMany({
+        where: { patientId, isActive: true },
+        select: { name: true, dosage: true, frequency: true, instructions: true, prescriber: true },
+        orderBy: { name: "asc" },
+      });
+
+      return { medications: meds, count: meds.length };
+    }
+
+    case "submit_care_request": {
+      if (role !== "FAMILY_MEMBER") return { error: "Only family members can submit care requests." };
+
+      const u = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { familyOf: { select: { id: true } } },
+      });
+      const patientId = u?.familyOf[0]?.id;
+      if (!patientId) return { error: "No connected patient found." };
+
+      const patient = await prisma.patient.findFirst({
+        where: { id: patientId, familyMembers: { some: { id: userId } } },
+        include: {
+          user: { select: { name: true } },
+          organization: {
+            include: { members: { where: { role: "ADMIN" }, select: { id: true } } },
+          },
+        },
+      });
+      if (!patient) return { error: "Patient not found or not connected to you." };
+
+      const { nanoid } = await import("nanoid");
+      const careRequest = await prisma.careRequest.create({
+        data: {
+          id: nanoid(),
+          patientId,
+          requestedById: userId,
+          requestedDate: new Date(args.requestedDate as string),
+          startTime: args.startTime as string,
+          endTime: args.endTime as string,
+          urgency: (args.urgency as string) ?? "NORMAL",
+          notes: (args.notes as string) ?? null,
+        },
+      });
+
+      // Notify admins
+      const userName = (await prisma.user.findUnique({ where: { id: userId }, select: { name: true } }))?.name ?? "Family member";
+      for (const admin of patient.organization?.members ?? []) {
+        await prisma.notification.create({
+          data: {
+            userId: admin.id,
+            title: args.urgency === "URGENT" ? `Urgent Care Request — ${patient.user.name}` : `Care Request — ${patient.user.name}`,
+            message: `${userName} is requesting a caregiver for ${patient.user.name} on ${args.requestedDate} from ${args.startTime} to ${args.endTime}.${args.notes ? ` Note: ${args.notes}` : ""}`,
+            type: "CARE_REQUEST",
+          },
+        });
+      }
+
+      return {
+        success: true,
+        requestId: careRequest.id,
+        message: `Care request submitted for ${patient.user.name} on ${args.requestedDate} from ${args.startTime} to ${args.endTime}. The agency has been notified.`,
+      };
+    }
+
+    case "get_care_requests": {
+      if (role === "FAMILY_MEMBER") {
+        const u = await prisma.user.findUnique({
+          where: { id: userId },
+          select: { familyOf: { select: { id: true } } },
+        });
+        const patientIds = u?.familyOf.map((p) => p.id) ?? [];
+        const requests = await prisma.careRequest.findMany({
+          where: { patientId: { in: patientIds }, requestedById: userId },
+          include: { patient: { include: { user: { select: { name: true } } } } },
+          orderBy: { createdAt: "desc" },
+          take: 10,
+        });
+        return requests.map((r) => ({
+          id: r.id,
+          patient: r.patient?.user?.name,
+          requestedDate: r.requestedDate,
+          startTime: r.startTime,
+          endTime: r.endTime,
+          status: r.status,
+          urgency: r.urgency,
+          notes: r.notes,
+        }));
+      }
+
+      if (role === "ADMIN") {
+        const requests = await prisma.careRequest.findMany({
+          where: { patient: { organizationId: orgId ?? "" } },
+          include: {
+            patient: { include: { user: { select: { name: true } } } },
+          },
+          orderBy: [{ status: "asc" }, { requestedDate: "asc" }],
+          take: 20,
+        });
+        return requests.map((r) => ({
+          id: r.id,
+          patient: r.patient?.user?.name,
+          requestedDate: r.requestedDate,
+          startTime: r.startTime,
+          endTime: r.endTime,
+          status: r.status,
+          urgency: r.urgency,
+          notes: r.notes,
+        }));
+      }
+
+      return { error: "Care request viewing is available for family members and admins." };
+    }
+
     case "create_patient": {
       if (role !== "ADMIN") return { error: "Only admins can create patients." };
       if (!orgId) return { error: "No organization found." };
@@ -610,22 +921,40 @@ export async function POST(request: NextRequest) {
     : role === "FAMILY_MEMBER" ? "family member"
     : "patient";
 
-  const systemPrompt = `You are Guardian AI, a scheduling and operations assistant for a home care agency. You help staff manage shifts, coverage, and care tasks.
+  const systemPrompt = `You are Guardian AI, a care assistant for a home care agency. You help everyone involved in care — admins, caregivers, patients, and family members.
 
 Today is ${today}.
 You are speaking with ${name ?? "a user"}, who is a ${roleLabel}.
 
-Guidelines:
-- Never share one patient's data with another patient or unauthorized user.
-- For caregivers: only show their own shifts and assigned patients' tasks.
-- For admins: you can show org-wide scheduling data and take actions.
-- Keep responses concise and action-oriented. Use bullet points for lists.
-- If asked about medical advice, say you cannot provide that and suggest they contact the care team.
-- When asked who is free or available at a time, use get_available_caregivers.
-- When asked to move or reschedule a shift, use reschedule_shift. Look up the shift ID via get_schedule first if needed.
-- When asked to reassign a shift to someone else, use reassign_shift.
-- When a caregiver reports they cannot make a shift, use report_callout.
-- Always confirm before taking any write action (reschedule, reassign, callout).`;
+Role-specific behavior:
+
+ADMIN:
+- Full access to org scheduling, caregivers, patients, shifts, and care requests.
+- Can reschedule, reassign, create patients/caregivers, assign caregivers to patients.
+- Use get_available_caregivers to find who is free at a given time.
+- Use get_schedule to look up shift IDs before rescheduling.
+
+CAREGIVER:
+- Can see their own shifts and assigned patients' tasks.
+- Can report a callout if they cannot make a shift.
+
+FAMILY_MEMBER:
+- Use get_my_patient_status when they ask for updates, status, or "how is my loved one".
+- Use get_upcoming_visits to show scheduled caregiver visits.
+- Use get_medications to show active medications (only if visibility is enabled).
+- Use submit_care_request when they want to request extra care on a date.
+- Use get_care_requests to show their submitted requests and their status.
+
+PATIENT:
+- Use get_my_patient_status to show their own tasks and upcoming visits.
+- Use get_medications to show their own medications.
+- Use get_today_tasks to show today's tasks.
+
+General:
+- Never share one patient's data with an unauthorized user.
+- Keep responses concise and warm. Use bullet points for lists.
+- Do not provide medical advice — suggest contacting the care team.
+- Always confirm before taking any write action (reschedule, callout, care request submission).`;
 
   const chatMessages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
     { role: "system", content: systemPrompt },
