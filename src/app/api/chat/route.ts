@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth/config";
 import OpenAI from "openai";
 import prisma from "@/lib/db";
+import bcrypt from "bcryptjs";
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
@@ -92,6 +93,54 @@ const tools: OpenAI.Chat.Completions.ChatCompletionTool[] = [
           },
         },
         required: ["reason"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "create_patient",
+      description: "Create a new patient record in the organization. Only admins can do this. Ask for name and email if not provided.",
+      parameters: {
+        type: "object",
+        properties: {
+          name: { type: "string", description: "Patient's full name" },
+          email: { type: "string", description: "Patient's email address" },
+          dateOfBirth: { type: "string", description: "Date of birth YYYY-MM-DD (optional)" },
+          medicalNotes: { type: "string", description: "Any initial medical notes (optional)" },
+          emergencyContact: { type: "string", description: "Emergency contact info (optional)" },
+        },
+        required: ["name", "email"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "create_caregiver",
+      description: "Create a new caregiver account in the organization. Only admins can do this. Ask for name and email if not provided.",
+      parameters: {
+        type: "object",
+        properties: {
+          name: { type: "string", description: "Caregiver's full name" },
+          email: { type: "string", description: "Caregiver's email address" },
+        },
+        required: ["name", "email"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "assign_caregiver_to_patient",
+      description: "Assign a caregiver to a patient so they can care for them. Use get_caregivers and get_patients to find IDs first if needed.",
+      parameters: {
+        type: "object",
+        properties: {
+          caregiverId: { type: "string", description: "The caregiver's user ID" },
+          patientId: { type: "string", description: "The patient's ID" },
+        },
+        required: ["caregiverId", "patientId"],
       },
     },
   },
@@ -295,6 +344,100 @@ async function executeTool(
         message:
           "Your callout has been recorded and the office has been notified. They will arrange coverage.",
       };
+    }
+
+    case "create_patient": {
+      if (role !== "ADMIN") return { error: "Only admins can create patients." };
+      if (!orgId) return { error: "No organization found." };
+
+      const existing = await prisma.user.findUnique({ where: { email: args.email as string } });
+      if (existing) return { error: `A user with email ${args.email} already exists.` };
+
+      const tempPass = Math.random().toString(36).slice(-10);
+      const hashed = await bcrypt.hash(tempPass, 12);
+
+      const result = await prisma.$transaction(async (tx) => {
+        const user = await tx.user.create({
+          data: { email: args.email as string, password: hashed, name: args.name as string, role: "PATIENT" },
+        });
+        const patient = await tx.patient.create({
+          data: {
+            userId: user.id,
+            organizationId: orgId,
+            dateOfBirth: args.dateOfBirth ? new Date(args.dateOfBirth as string) : null,
+            medicalNotes: (args.medicalNotes as string) ?? null,
+            emergencyContact: (args.emergencyContact as string) ?? null,
+          },
+        });
+        return { user, patient };
+      });
+
+      return {
+        success: true,
+        patientId: result.patient.id,
+        name: result.user.name,
+        email: result.user.email,
+        temporaryPassword: tempPass,
+        message: `Patient ${result.user.name} created. Temporary password: ${tempPass}`,
+      };
+    }
+
+    case "create_caregiver": {
+      if (role !== "ADMIN") return { error: "Only admins can create caregivers." };
+      if (!orgId) return { error: "No organization found." };
+
+      const existing = await prisma.user.findUnique({ where: { email: args.email as string } });
+      if (existing) return { error: `A user with email ${args.email} already exists.` };
+
+      const tempPass = Math.random().toString(36).slice(-10);
+      const hashed = await bcrypt.hash(tempPass, 12);
+
+      const caregiver = await prisma.user.create({
+        data: {
+          email: args.email as string,
+          password: hashed,
+          name: args.name as string,
+          role: "CAREGIVER",
+          organizationId: orgId,
+        },
+      });
+
+      return {
+        success: true,
+        caregiverId: caregiver.id,
+        name: caregiver.name,
+        email: caregiver.email,
+        temporaryPassword: tempPass,
+        message: `Caregiver ${caregiver.name} created. Temporary password: ${tempPass}`,
+      };
+    }
+
+    case "assign_caregiver_to_patient": {
+      if (role !== "ADMIN") return { error: "Only admins can assign caregivers." };
+
+      const patient = await prisma.patient.findUnique({
+        where: { id: args.patientId as string },
+        select: { organizationId: true, familyMembers: { select: { id: true } } },
+      });
+      if (!patient) return { error: "Patient not found." };
+      if (patient.organizationId !== orgId) return { error: "Patient is not in your organization." };
+
+      const caregiver = await prisma.user.findUnique({
+        where: { id: args.caregiverId as string },
+        select: { organizationId: true, name: true, role: true },
+      });
+      if (!caregiver || caregiver.role !== "CAREGIVER") return { error: "Caregiver not found." };
+      if (caregiver.organizationId !== orgId) return { error: "Caregiver is not in your organization." };
+
+      const alreadyAssigned = patient.familyMembers.some((m) => m.id === args.caregiverId);
+      if (alreadyAssigned) return { error: `${caregiver.name} is already assigned to this patient.` };
+
+      await prisma.patient.update({
+        where: { id: args.patientId as string },
+        data: { familyMembers: { connect: { id: args.caregiverId as string } } },
+      });
+
+      return { success: true, message: `${caregiver.name} has been assigned to the patient.` };
     }
 
     default:
