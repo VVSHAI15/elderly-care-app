@@ -19,7 +19,8 @@ import { ClockInOut } from "@/components/caregiver/ClockInOut";
 import { HealthMetricLogger } from "@/components/caregiver/HealthMetricLogger";
 import { CareProfileView } from "@/components/patient/CareProfileView";
 import { EditCareProfileModal } from "@/components/patient/EditCareProfileModal";
-import { ChatWidget } from "@/components/chat/ChatWidget";
+import { ChatPanel } from "@/components/chat/ChatPanel";
+import { Bot } from "lucide-react";
 import type { CareProfile } from "@/types/care-profile";
 
 interface PatientData {
@@ -59,7 +60,7 @@ interface ConnectedPatient {
 export default function DashboardPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<"tasks" | "scan" | "medications" | "connections" | "history" | "vitals" | "shifts" | "care-profile">("tasks");
+  const [activeTab, setActiveTab] = useState<"assistant" | "tasks" | "scan" | "medications" | "connections" | "history" | "vitals" | "shifts" | "care-profile">("assistant");
   const [showAddTask, setShowAddTask] = useState(false);
   const [patient, setPatient] = useState<PatientData | null>(null);
   const [connections, setConnections] = useState<Connection[]>([]);
@@ -305,6 +306,19 @@ export default function DashboardPage() {
           <>
             {/* Tab Navigation */}
             <div className="flex gap-3 mb-8 flex-wrap">
+              {/* AI Assistant — always first */}
+              <button
+                onClick={() => setActiveTab("assistant")}
+                className={`px-5 py-3 rounded-xl font-semibold text-base transition-colors flex items-center gap-2 ${
+                  activeTab === "assistant"
+                    ? "bg-[#2f5f9f] text-white shadow-[0_10px_20px_rgba(47,95,159,0.30)] ring-2 ring-[#9cbbe2]"
+                    : "bg-[#eef4ff] text-[#2f5f9f] hover:bg-[#dbe8f8] border-2 border-[#b8d0ef]"
+                }`}
+              >
+                <Bot className="w-5 h-5" />
+                AI Assistant
+              </button>
+
               {currentPatientId && (
                 <>
                   <button
@@ -414,7 +428,10 @@ export default function DashboardPage() {
             </div>
 
             {/* Tab Content */}
-            <div className="bg-white/95 rounded-2xl shadow-[0_18px_42px_rgba(25,48,88,0.10)] border border-[#d8e2f1] p-8">
+            {activeTab === "assistant" && (
+              <ChatPanel role={userRole} />
+            )}
+            <div className={`bg-white/95 rounded-2xl shadow-[0_18px_42px_rgba(25,48,88,0.10)] border border-[#d8e2f1] p-8 ${activeTab === "assistant" ? "hidden" : ""}`}>
               {/* Patient detail loading / error state */}
               {patientLoading && (
                 <div className="flex items-center justify-center py-16">
@@ -633,7 +650,6 @@ export default function DashboardPage() {
           </>
         )}
       </main>
-      <ChatWidget role={session?.user?.role} />
     </div>
   );
 }

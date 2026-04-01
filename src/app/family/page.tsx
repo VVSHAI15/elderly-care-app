@@ -11,7 +11,8 @@ import { MedicationAdherenceChart } from "@/components/family/MedicationAdherenc
 import { HealthMetricsChart } from "@/components/family/HealthMetricsChart";
 import { VisitHistory } from "@/components/family/VisitHistory";
 import { ActivityFeed } from "@/components/family/ActivityFeed";
-import { ChatWidget } from "@/components/chat/ChatWidget";
+import { ChatPanel } from "@/components/chat/ChatPanel";
+import { Bot } from "lucide-react";
 
 interface DashboardData {
   patient: { id: string; name: string | null; email: string };
@@ -44,6 +45,7 @@ interface CareRequest {
 export default function FamilyDashboardPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
+  const [activeTab, setActiveTab] = useState<"assistant" | "overview">("assistant");
   const [dashData, setDashData] = useState<DashboardData | null>(null);
   const [connectedPatients, setConnectedPatients] = useState<ConnectedPatient[]>([]);
   const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null);
@@ -212,13 +214,43 @@ export default function FamilyDashboardPage() {
           )}
         </div>
 
-        {!dashData ? (
+        {/* Tab bar */}
+        <div className="flex gap-3 mb-6 flex-wrap">
+          <button
+            onClick={() => setActiveTab("assistant")}
+            className={`flex items-center gap-2 px-5 py-3 rounded-xl font-semibold text-sm transition-colors ${
+              activeTab === "assistant"
+                ? "bg-[#2f5f9f] text-white shadow-[0_8px_16px_rgba(47,95,159,0.28)] ring-2 ring-[#9cbbe2]"
+                : "bg-[#eef4ff] text-[#2f5f9f] hover:bg-[#dbe8f8] border-2 border-[#b8d0ef]"
+            }`}
+          >
+            <Bot className="w-4 h-4" />
+            AI Assistant
+          </button>
+          <button
+            onClick={() => setActiveTab("overview")}
+            className={`flex items-center gap-2 px-5 py-3 rounded-xl font-semibold text-sm transition-colors ${
+              activeTab === "overview"
+                ? "bg-[#2f5f9f] text-white shadow-[0_8px_16px_rgba(47,95,159,0.28)] ring-2 ring-[#9cbbe2]"
+                : "bg-white text-gray-800 hover:bg-[#eff5ff] border-2 border-[#d6e2f1]"
+            }`}
+          >
+            <Activity className="w-4 h-4" />
+            Care Overview
+          </button>
+        </div>
+
+        {activeTab === "assistant" && (
+          <ChatPanel role="FAMILY_MEMBER" />
+        )}
+
+        {activeTab === "overview" && !dashData ? (
           <div className="bg-white/95 rounded-2xl p-12 shadow border border-[#d8e2f1] text-center">
             <TrendingUp className="w-14 h-14 text-gray-200 mx-auto mb-4" />
             <h3 className="font-bold text-gray-900 mb-2">No data yet</h3>
             <p className="text-gray-500">Connect to a patient to view their care dashboard.</p>
           </div>
-        ) : (
+        ) : activeTab === "overview" && dashData ? (
           <div className="space-y-6">
             {/* Overview Cards */}
             <div className="grid grid-cols-3 gap-4">
@@ -307,9 +339,9 @@ export default function FamilyDashboardPage() {
               )}
             </div>
           </div>
-        )}
+        ) : null}
         {/* My Care Requests */}
-        {careRequests.length > 0 && (
+        {activeTab === "overview" && careRequests.length > 0 && (
           <div className="bg-white/95 rounded-2xl p-6 border border-[#d8e2f1] shadow-sm mt-6">
             <div className="flex items-center gap-2 mb-4">
               <CalendarPlus className="w-5 h-5 text-[#2f5f9f]" />
@@ -454,7 +486,6 @@ export default function FamilyDashboardPage() {
           </div>
         </div>
       )}
-      <ChatWidget role="FAMILY_MEMBER" />
     </div>
   );
 }

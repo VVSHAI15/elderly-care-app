@@ -894,6 +894,39 @@ async function executeTool(
   }
 }
 
+// ── Mutating tools that require user confirmation ────────────────────────────
+
+const MUTATING_TOOLS = new Set([
+  "reschedule_shift",
+  "reassign_shift",
+  "report_callout",
+  "create_patient",
+  "create_caregiver",
+  "assign_caregiver_to_patient",
+  "submit_care_request",
+]);
+
+function buildActionSummary(tool: string, args: Record<string, unknown>): string {
+  switch (tool) {
+    case "reschedule_shift":
+      return `Reschedule shift to ${args.newStartTime} – ${args.newEndTime}${args.newCaregiverId ? ", with a new caregiver" : ""}.`;
+    case "reassign_shift":
+      return `Reassign shift ${args.shiftId} to a different caregiver.`;
+    case "report_callout":
+      return `Report a callout for your upcoming shift. Reason: "${args.reason}"${args.canArriveLate ? ` (late arrival at ${args.lateArrivalTime ?? "unspecified"})` : ""}.`;
+    case "create_patient":
+      return `Create a new patient: ${args.name} (${args.email}).`;
+    case "create_caregiver":
+      return `Create a new caregiver: ${args.name} (${args.email}).`;
+    case "assign_caregiver_to_patient":
+      return `Assign caregiver to patient in the system.`;
+    case "submit_care_request":
+      return `Submit a care request for ${args.requestedDate} from ${args.startTime} to ${args.endTime}${args.urgency === "URGENT" ? " (URGENT)" : ""}.`;
+    default:
+      return `Perform action: ${tool}.`;
+  }
+}
+
 // ── Route handler ────────────────────────────────────────────────────────────
 
 export async function POST(request: NextRequest) {
@@ -902,7 +935,12 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { messages } = await request.json();
+  const body = await request.json();
+  const { messages, confirmedAction } = body as {
+    messages: { role: string; content: string }[];
+    confirmedAction?: { tool: string; args: Record<string, unknown> };
+  };
+
   if (!Array.isArray(messages) || messages.length === 0) {
     return NextResponse.json({ error: "Messages are required" }, { status: 400 });
   }
@@ -954,11 +992,53 @@ General:
 - Never share one patient's data with an unauthorized user.
 - Keep responses concise and warm. Use bullet points for lists.
 - Do not provide medical advice — suggest contacting the care team.
-- Always confirm before taking any write action (reschedule, callout, care request submission).`;
+- When taking any write action (reschedule, reassign, callout, create, submit), call the tool directly — the UI handles confirmation separately.`;
+
+  // ── Confirmed action: skip AI, execute the tool, get a summary response ──
+  if (confirmedAction) {
+    const result = await executeTool(
+      confirmedAction.tool,
+      confirmedAction.args,
+      userId,
+      orgId ?? null,
+      role ?? ""
+    );
+
+    const confirmMessages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
+      { role: "system", content: systemPrompt },
+      ...(messages as OpenAI.Chat.Completions.ChatCompletionMessageParam[]),
+      {
+        role: "assistant" as const,
+        content: null,
+        tool_calls: [
+          {
+            id: "confirmed_tool_call",
+            type: "function" as const,
+            function: {
+              name: confirmedAction.tool,
+              arguments: JSON.stringify(confirmedAction.args),
+            },
+          },
+        ],
+      },
+      {
+        role: "tool" as const,
+        tool_call_id: "confirmed_tool_call",
+        content: JSON.stringify(result),
+      },
+    ];
+
+    const finalResponse = await openai.chat.completions.create({
+      model: "gpt-4o",
+      messages: confirmMessages,
+    });
+
+    return NextResponse.json({ reply: finalResponse.choices[0].message.content });
+  }
 
   const chatMessages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
     { role: "system", content: systemPrompt },
-    ...messages,
+    ...(messages as OpenAI.Chat.Completions.ChatCompletionMessageParam[]),
   ];
 
   // Agentic loop — resolve tool calls until the model is done
@@ -977,8 +1057,30 @@ General:
       return NextResponse.json({ reply: choice.message.content });
     }
 
+    // Check if any of the tool calls are mutating — require confirmation before executing
+    type FunctionToolCall = { id: string; type: "function"; function: { name: string; arguments: string } };
+    const toolCalls = (choice.message.tool_calls ?? []) as FunctionToolCall[];
+    const mutatingCall = toolCalls.find((tc) => MUTATING_TOOLS.has(tc.function.name));
+
+    if (mutatingCall) {
+      const args = JSON.parse(mutatingCall.function.arguments) as Record<string, unknown>;
+      const summary = buildActionSummary(mutatingCall.function.name, args);
+      const replyText =
+        (choice.message.content as string | null) ??
+        `I'm ready to ${summary.toLowerCase().replace(/\.$/, "")}. Please confirm below.`;
+
+      return NextResponse.json({
+        reply: replyText,
+        pendingAction: {
+          tool: mutatingCall.function.name,
+          args,
+          summary,
+        },
+      });
+    }
+
     const toolResults = await Promise.all(
-      (choice.message.tool_calls ?? []).map(async (tc) => {
+      toolCalls.map(async (tc) => {
         const args = JSON.parse(tc.function.arguments) as Record<string, unknown>;
         const result = await executeTool(tc.function.name, args, userId, orgId ?? null, role ?? "");
         return {

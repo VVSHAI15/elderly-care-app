@@ -11,14 +11,15 @@ import { AdminPatients } from "@/components/admin/AdminPatients";
 import { AdminShifts } from "@/components/admin/AdminShifts";
 import { AdminAnalytics } from "@/components/admin/AdminAnalytics";
 import { AdminSchedule } from "@/components/admin/AdminSchedule";
-import { ChatWidget } from "@/components/chat/ChatWidget";
+import { ChatPanel } from "@/components/chat/ChatPanel";
+import { Bot } from "lucide-react";
 
-type Tab = "caregivers" | "patients" | "shifts" | "schedule" | "analytics";
+type Tab = "assistant" | "caregivers" | "patients" | "shifts" | "schedule" | "analytics";
 
 export default function AdminPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<Tab>("patients");
+  const [activeTab, setActiveTab] = useState<Tab>("assistant");
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -38,7 +39,8 @@ export default function AdminPage() {
 
   if (!session || session.user.role !== "ADMIN") return null;
 
-  const tabs: { key: Tab; label: string; icon: React.ReactNode }[] = [
+  const tabs: { key: Tab; label: string; icon: React.ReactNode; highlight?: boolean }[] = [
+    { key: "assistant", label: "AI Assistant", icon: <Bot className="w-4 h-4" />, highlight: true },
     { key: "patients", label: "Patients", icon: <Users className="w-4 h-4" /> },
     { key: "caregivers", label: "Caregivers", icon: <Users className="w-4 h-4" /> },
     { key: "schedule", label: "Schedule", icon: <CalendarClock className="w-4 h-4" /> },
@@ -100,6 +102,8 @@ export default function AdminPage() {
               className={`flex items-center gap-2 px-5 py-3 rounded-xl font-semibold text-sm transition-colors ${
                 activeTab === tab.key
                   ? "bg-[#2f5f9f] text-white shadow-[0_8px_16px_rgba(47,95,159,0.28)] ring-2 ring-[#9cbbe2]"
+                  : tab.highlight
+                  ? "bg-[#eef4ff] text-[#2f5f9f] hover:bg-[#dbe8f8] border-2 border-[#b8d0ef]"
                   : "bg-white text-gray-800 hover:bg-[#eff5ff] border-2 border-[#d6e2f1]"
               }`}
             >
@@ -110,15 +114,18 @@ export default function AdminPage() {
         </div>
 
         {/* Tab Content */}
-        <div className="bg-white/95 rounded-2xl shadow-[0_18px_42px_rgba(25,48,88,0.10)] border border-[#d8e2f1] p-8">
-          {activeTab === "patients" && <AdminPatients />}
-          {activeTab === "caregivers" && <AdminCaregivers />}
-          {activeTab === "schedule" && <AdminSchedule />}
-          {activeTab === "shifts" && <AdminShifts />}
-          {activeTab === "analytics" && <AdminAnalytics />}
-        </div>
+        {activeTab === "assistant" ? (
+          <ChatPanel role="ADMIN" />
+        ) : (
+          <div className="bg-white/95 rounded-2xl shadow-[0_18px_42px_rgba(25,48,88,0.10)] border border-[#d8e2f1] p-8">
+            {activeTab === "patients" && <AdminPatients />}
+            {activeTab === "caregivers" && <AdminCaregivers />}
+            {activeTab === "schedule" && <AdminSchedule />}
+            {activeTab === "shifts" && <AdminShifts />}
+            {activeTab === "analytics" && <AdminAnalytics />}
+          </div>
+        )}
       </main>
-      <ChatWidget role="ADMIN" />
     </div>
   );
 }
