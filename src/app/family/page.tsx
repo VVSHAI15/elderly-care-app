@@ -3,7 +3,7 @@
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useCallback } from "react";
-import { Heart, LogOut, Loader2, TrendingUp, Activity, Clock, CheckCircle2, Pill, CalendarPlus, X, AlertTriangle } from "lucide-react";
+import { Heart, LogOut, Loader2, TrendingUp, Activity, Clock, CheckCircle2, Pill, CalendarPlus, X, AlertTriangle, Bot, UserPlus } from "lucide-react";
 import { signOut } from "next-auth/react";
 import { NotificationBell } from "@/components/notifications/NotificationBell";
 import { TaskCompletionChart } from "@/components/family/TaskCompletionChart";
@@ -12,7 +12,7 @@ import { HealthMetricsChart } from "@/components/family/HealthMetricsChart";
 import { VisitHistory } from "@/components/family/VisitHistory";
 import { ActivityFeed } from "@/components/family/ActivityFeed";
 import { ChatPanel } from "@/components/chat/ChatPanel";
-import { Bot } from "lucide-react";
+import { ConnectToPatient } from "@/components/connections/ConnectToPatient";
 
 interface DashboardData {
   patient: { id: string; name: string | null; email: string };
@@ -50,6 +50,8 @@ export default function FamilyDashboardPage() {
   const [connectedPatients, setConnectedPatients] = useState<ConnectedPatient[]>([]);
   const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [connectionsLoaded, setConnectionsLoaded] = useState(false);
+  const [showConnectModal, setShowConnectModal] = useState(false);
   const [showRequestModal, setShowRequestModal] = useState(false);
   const [careRequests, setCareRequests] = useState<CareRequest[]>([]);
   const [reqDate, setReqDate] = useState("");
@@ -86,6 +88,7 @@ export default function FamilyDashboardPage() {
         if (d.type !== "patient" && d.connections?.length) {
           setConnectedPatients(d.connections.map((c: { patientId: string; name: string | null }) => ({ patientId: c.patientId, name: c.name })));
         }
+        setConnectionsLoaded(true);
       });
 
     fetchDashboard();
@@ -134,7 +137,22 @@ export default function FamilyDashboardPage() {
     }
   };
 
-  if (status === "loading" || loading) {
+  const handleConnected = () => {
+    // Re-fetch connections then reload dashboard
+    fetch("/api/patients/connections")
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.type !== "patient" && d.connections?.length) {
+          const patients = d.connections.map((c: { patientId: string; name: string | null }) => ({ patientId: c.patientId, name: c.name }));
+          setConnectedPatients(patients);
+          fetchDashboard(patients[0].patientId);
+        }
+        setConnectionsLoaded(true);
+        setShowConnectModal(false);
+      });
+  };
+
+  if (status === "loading" || (loading && !connectionsLoaded)) {
     return (
       <div className="min-h-screen bg-[#edf2fa] flex items-center justify-center">
         <Loader2 className="w-10 h-10 text-[#2f5f9f] animate-spin" />
@@ -143,6 +161,44 @@ export default function FamilyDashboardPage() {
   }
 
   if (!session) return null;
+
+  // No connections yet — show full-page connect screen
+  if (connectionsLoaded && connectedPatients.length === 0) {
+    return (
+      <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,_#dbe8f8_0%,_#eff4fb_45%,_#f7faff_100%)]">
+        <header className="bg-white/95 backdrop-blur border-b border-[#d6e2f1] sticky top-0 z-30">
+          <div className="container mx-auto px-4 py-4 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <Heart className="w-8 h-8 text-[#2f5f9f]" />
+              <span className="text-2xl font-bold text-gray-900">guardian.ai</span>
+              <span className="hidden sm:inline px-2.5 py-1 bg-[#f0f5fd] border border-[#d8e2f1] rounded-full text-xs font-semibold text-[#2f5f9f] uppercase tracking-wide">Family View</span>
+            </div>
+            <button
+              onClick={() => signOut({ callbackUrl: "/" })}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl hover:bg-[#f0f5fd] transition-colors text-gray-700 font-medium border border-[#d8e2f1]"
+            >
+              <LogOut className="w-5 h-5" />
+              <span className="hidden sm:inline">Sign Out</span>
+            </button>
+          </div>
+        </header>
+        <main className="container mx-auto px-4 py-16 max-w-md">
+          <div className="text-center mb-8">
+            <div className="w-16 h-16 bg-[#f0f5fd] rounded-2xl flex items-center justify-center mx-auto mb-4">
+              <UserPlus className="w-8 h-8 text-[#2f5f9f]" />
+            </div>
+            <h1 className="text-3xl font-bold text-gray-900 mb-2">Connect to a Patient</h1>
+            <p className="text-gray-500">Enter the invite code shared by the care team or patient to get started.</p>
+          </div>
+          <ConnectToPatient
+            connectedPatients={[]}
+            onConnect={handleConnected}
+            onSelectPatient={() => {}}
+          />
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,_#dbe8f8_0%,_#eff4fb_45%,_#f7faff_100%)]">
@@ -158,6 +214,13 @@ export default function FamilyDashboardPage() {
               </span>
             </div>
             <div className="flex items-center gap-3">
+              <button
+                onClick={() => setShowConnectModal(true)}
+                className="flex items-center gap-2 px-4 py-2.5 rounded-xl hover:bg-[#f0f5fd] transition-colors text-[#2f5f9f] font-medium border border-[#d8e2f1] text-sm"
+              >
+                <UserPlus className="w-4 h-4" />
+                <span className="hidden sm:inline">Add Patient</span>
+              </button>
               {dashData && (
                 <button
                   onClick={() => setShowRequestModal(true)}
@@ -378,6 +441,28 @@ export default function FamilyDashboardPage() {
           </div>
         )}
       </main>
+
+      {/* Connect to Patient Modal */}
+      {showConnectModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-2xl shadow-2xl border border-[#d8e2f1] w-full max-w-md p-8">
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <h2 className="text-xl font-bold text-gray-900">Connect to a Patient</h2>
+                <p className="text-sm text-gray-500 mt-0.5">Enter the 6-digit invite code from the care team.</p>
+              </div>
+              <button onClick={() => setShowConnectModal(false)} className="p-2 hover:bg-gray-100 rounded-xl transition-colors">
+                <X className="w-5 h-5 text-gray-500" />
+              </button>
+            </div>
+            <ConnectToPatient
+              connectedPatients={[]}
+              onConnect={handleConnected}
+              onSelectPatient={() => setShowConnectModal(false)}
+            />
+          </div>
+        </div>
+      )}
 
       {/* Request Caregiver Modal */}
       {showRequestModal && (
