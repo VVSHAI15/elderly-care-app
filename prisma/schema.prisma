@@ -387,6 +387,8 @@ enum ScheduledShiftStatus {
   IN_PROGRESS
   COMPLETED
   CANCELLED
+  MISSED
+  NEEDS_COVERAGE
 }
 
 enum ShiftRequestType {
