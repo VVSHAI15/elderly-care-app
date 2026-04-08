@@ -379,18 +379,17 @@ async function executeTool(
       }
 
       // Find caregivers with a conflicting scheduled shift in this window
-      const busyCaregiverIds = await prisma.scheduledShift.findMany({
+      const busyShifts = await prisma.scheduledShift.findMany({
         where: {
           patient: { organizationId: orgId },
-          status: { notIn: ["MISSED", "CANCELLED"] },
+          status: { notIn: ["CANCELLED"] },
           startTime: { lt: windowEnd },
           endTime: { gt: windowStart },
-          caregiverId: { not: null },
         },
         select: { caregiverId: true },
       });
 
-      const busyIds = new Set(busyCaregiverIds.map((s) => s.caregiverId).filter(Boolean));
+      const busyIds = new Set(busyShifts.map((s) => s.caregiverId).filter(Boolean));
 
       const allCaregivers = await prisma.user.findMany({
         where: { organizationId: orgId, role: "CAREGIVER" },
