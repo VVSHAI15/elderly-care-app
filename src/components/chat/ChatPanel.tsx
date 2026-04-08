@@ -90,7 +90,7 @@ export function ChatPanel({ role }: { role?: string }) {
           messages: next.map((m) => ({ role: m.role, content: m.content })),
         }),
       });
-      const data = await res.json();
+      const data = res.ok ? await res.json() : { reply: "Sorry, I ran into an error. Please try again." };
 
       const assistantMsg: Message = {
         role: "assistant",
@@ -134,7 +134,7 @@ export function ChatPanel({ role }: { role?: string }) {
           confirmedAction: action,
         }),
       });
-      const data = await res.json();
+      const data = res.ok ? await res.json() : { reply: "Sorry, the action failed. Please try again." };
       setMessages((prev) => [...prev, { role: "assistant", content: data.reply ?? "Done." }]);
     } catch {
       setMessages((prev) => [

@@ -374,6 +374,9 @@ async function executeTool(
       if (!orgId) return { error: "No organization found" };
       const windowStart = new Date(args.startTime as string);
       const windowEnd = new Date(args.endTime as string);
+      if (isNaN(windowStart.getTime()) || isNaN(windowEnd.getTime())) {
+        return { error: "Invalid time range. Please specify a date and time, e.g. 'tomorrow 9am to 5pm'." };
+      }
 
       // Find caregivers with a conflicting scheduled shift in this window
       const busyCaregiverIds = await prisma.scheduledShift.findMany({
@@ -930,6 +933,7 @@ function buildActionSummary(tool: string, args: Record<string, unknown>): string
 // ── Route handler ────────────────────────────────────────────────────────────
 
 export async function POST(request: NextRequest) {
+  try {
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -1095,4 +1099,11 @@ General:
   }
 
   return NextResponse.json({ reply: "I was unable to complete that request. Please try again." });
+  } catch (err) {
+    console.error("[chat] unhandled error:", err);
+    return NextResponse.json(
+      { reply: "Something went wrong on my end. Please try again in a moment." },
+      { status: 500 }
+    );
+  }
 }
