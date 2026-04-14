@@ -273,8 +273,16 @@ async function executeTool(
 ): Promise<unknown> {
   switch (name) {
     case "get_schedule": {
+      // Family members and patients should use get_my_patient_status / get_upcoming_visits
+      if (role === "FAMILY_MEMBER" || role === "PATIENT") {
+        return { error: "Use get_upcoming_visits to see caregiver visits for your patient." };
+      }
+
       const start = new Date(args.startDate as string);
       const end = new Date(args.endDate as string);
+      if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+        return { error: "Invalid date range. Please use YYYY-MM-DD format, e.g. '2026-04-14'." };
+      }
       end.setHours(23, 59, 59, 999);
 
       const where: Record<string, unknown> = { startTime: { gte: start, lte: end } };
@@ -306,10 +314,14 @@ async function executeTool(
     }
 
     case "get_open_shifts": {
+      if (role === "FAMILY_MEMBER" || role === "PATIENT") {
+        return { error: "This information is only available to admins and caregivers." };
+      }
+      if (!orgId) return { error: "No organization found." };
       const shifts = await prisma.scheduledShift.findMany({
         where: {
           status: { in: ["MISSED", "NEEDS_COVERAGE"] },
-          ...(orgId ? { patient: { organizationId: orgId } } : {}),
+          patient: { organizationId: orgId },
           startTime: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) },
         },
         include: {
@@ -416,16 +428,47 @@ async function executeTool(
 
       const where: Record<string, unknown> = { dueDate: { gte: today, lt: tomorrow } };
 
-      if (args.patientId) {
-        where.patientId = args.patientId;
-      } else if (role === "CAREGIVER") {
-        const caregiver = await prisma.user.findUnique({
+      if (role === "PATIENT") {
+        // Patient can only see their own tasks
+        const patientRecord = await prisma.patient.findUnique({ where: { userId }, select: { id: true } });
+        if (!patientRecord) return { error: "No patient record found for your account." };
+        where.patientId = patientRecord.id;
+      } else if (role === "FAMILY_MEMBER") {
+        // Family members see tasks for their connected patients only
+        const u = await prisma.user.findUnique({
           where: { id: userId },
           select: { familyOf: { select: { id: true } } },
         });
-        where.patientId = { in: caregiver?.familyOf.map((p) => p.id) ?? [] };
-      } else if (orgId) {
-        where.patient = { organizationId: orgId };
+        const ids = u?.familyOf.map((p) => p.id) ?? [];
+        if (ids.length === 0) return { error: "You are not connected to any patients." };
+        // If a specific patientId was requested, validate ownership
+        if (args.patientId) {
+          if (!ids.includes(args.patientId as string)) return { error: "You do not have access to that patient." };
+          where.patientId = args.patientId;
+        } else {
+          where.patientId = { in: ids };
+        }
+      } else if (role === "CAREGIVER") {
+        // Caregivers see tasks for patients assigned to them via Patient.familyMembers
+        const assignedPatients = await prisma.patient.findMany({
+          where: { familyMembers: { some: { id: userId } } },
+          select: { id: true },
+        });
+        const ids = assignedPatients.map((p) => p.id);
+        if (ids.length === 0) return { tasks: [], message: "You have no assigned patients with tasks today." };
+        if (args.patientId) {
+          if (!ids.includes(args.patientId as string)) return { error: "That patient is not assigned to you." };
+          where.patientId = args.patientId;
+        } else {
+          where.patientId = { in: ids };
+        }
+      } else if (role === "ADMIN") {
+        // Admin can see all tasks in their org, or filter by a specific patient
+        if (args.patientId) {
+          where.patientId = args.patientId;
+        } else if (orgId) {
+          where.patient = { organizationId: orgId };
+        }
       }
 
       const tasks = await prisma.task.findMany({
@@ -457,11 +500,18 @@ async function executeTool(
         },
       });
       if (!shift) return { error: "Shift not found." };
-      if (shift.patient?.organizationId !== orgId) return { error: "Shift is not in your organization." };
+      if (!shift.patient) return { error: "Shift has no associated patient." };
+      if (shift.patient.organizationId !== orgId) return { error: "Shift is not in your organization." };
+
+      const newStart = new Date(args.newStartTime as string);
+      const newEnd = new Date(args.newEndTime as string);
+      if (isNaN(newStart.getTime()) || isNaN(newEnd.getTime())) {
+        return { error: "Invalid date/time format. Please use ISO format, e.g. '2026-04-15T09:00:00'." };
+      }
 
       const updateData: Record<string, unknown> = {
-        startTime: new Date(args.newStartTime as string),
-        endTime: new Date(args.newEndTime as string),
+        startTime: newStart,
+        endTime: newEnd,
       };
       if (args.newCaregiverId) updateData.caregiverId = args.newCaregiverId;
 
@@ -489,7 +539,8 @@ async function executeTool(
         include: { patient: { select: { organizationId: true } } },
       });
       if (!shift) return { error: "Shift not found." };
-      if (shift.patient?.organizationId !== orgId) return { error: "Shift is not in your organization." };
+      if (!shift.patient) return { error: "Shift has no associated patient." };
+      if (shift.patient.organizationId !== orgId) return { error: "Shift is not in your organization." };
 
       const caregiver = await prisma.user.findUnique({
         where: { id: args.caregiverId as string },
@@ -726,10 +777,9 @@ async function executeTool(
       });
       if (!patient) return { error: "Patient not found or not connected to you." };
 
-      const { nanoid } = await import("nanoid");
       const careRequest = await prisma.careRequest.create({
         data: {
-          id: nanoid(),
+          id: crypto.randomUUID(),
           patientId,
           requestedById: userId,
           requestedDate: new Date(args.requestedDate as string),
@@ -786,8 +836,9 @@ async function executeTool(
       }
 
       if (role === "ADMIN") {
+        if (!orgId) return { error: "No organization found." };
         const requests = await prisma.careRequest.findMany({
-          where: { patient: { organizationId: orgId ?? "" } },
+          where: { patient: { organizationId: orgId } },
           include: {
             patient: { include: { user: { select: { name: true } } } },
           },
