@@ -61,6 +61,7 @@ export default function DashboardPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<"assistant" | "tasks" | "scan" | "medications" | "connections" | "history" | "vitals" | "shifts" | "care-profile">("assistant");
+  const [mobileCaregiverTab, setMobileCaregiverTab] = useState<"shifts" | "tasks" | "vitals">("shifts");
   const [showAddTask, setShowAddTask] = useState(false);
   const [patient, setPatient] = useState<PatientData | null>(null);
   const [connections, setConnections] = useState<Connection[]>([]);
@@ -304,8 +305,96 @@ export default function DashboardPage() {
           </div>
         ) : (
           <>
-            {/* Tab Navigation */}
-            <div className="flex gap-3 mb-8 flex-wrap">
+            {/* ── Mobile Caregiver View ────────────────────────────────── */}
+            {isCaregiver && viewingPatientDetail && currentPatientId && (
+              <div className="md:hidden pb-24">
+                {/* Patient context bar */}
+                <div className="bg-white/95 rounded-2xl border border-[#d8e2f1] shadow-sm px-4 py-3 flex items-center gap-3 mb-4">
+                  <button onClick={handleBackToDashboard} className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors">
+                    <ArrowLeft className="w-5 h-5 text-[#2f5f9f]" />
+                  </button>
+                  <div>
+                    <p className="text-xs text-gray-500 font-medium uppercase tracking-wide">Caring for</p>
+                    <p className="font-bold text-gray-900">{patient?.user?.name ?? "Patient"}</p>
+                  </div>
+                </div>
+
+                {patientLoading && (
+                  <div className="flex items-center justify-center py-20">
+                    <Loader2 className="w-8 h-8 text-[#2f5f9f] animate-spin" />
+                  </div>
+                )}
+
+                {!patientLoading && !patientError && mobileCaregiverTab === "shifts" && (
+                  <div className="bg-white/95 rounded-2xl border border-[#d8e2f1] shadow-sm p-5">
+                    <h2 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
+                      <Clock className="w-5 h-5 text-[#2f5f9f]" /> Clock In / Out
+                    </h2>
+                    <ClockInOut key={currentPatientId} patientId={currentPatientId} patientName={patient?.user?.name || null} />
+                  </div>
+                )}
+
+                {!patientLoading && !patientError && mobileCaregiverTab === "tasks" && (
+                  <div className="bg-white/95 rounded-2xl border border-[#d8e2f1] shadow-sm p-5">
+                    <div className="flex items-center justify-between mb-4">
+                      <h2 className="text-lg font-bold text-gray-900">Today&apos;s Tasks</h2>
+                      <button
+                        onClick={() => setShowAddTask(true)}
+                        className="flex items-center gap-1.5 px-3 py-2 bg-[#2f5f9f] text-white rounded-xl text-sm font-semibold"
+                      >
+                        <Plus className="w-4 h-4" /> Add
+                      </button>
+                    </div>
+                    <TaskList
+                      key={`${currentPatientId}-${taskListKey}`}
+                      patientId={currentPatientId}
+                      connections={connections}
+                      patientAllergies={
+                        patient?.allergies
+                          ? (Array.isArray((patient.allergies as { items?: unknown[] })?.items)
+                              ? (patient.allergies as { items: { substance: string; reaction?: string; severity?: string }[] }).items
+                              : [])
+                          : []
+                      }
+                    />
+                  </div>
+                )}
+
+                {!patientLoading && !patientError && mobileCaregiverTab === "vitals" && (
+                  <div className="bg-white/95 rounded-2xl border border-[#d8e2f1] shadow-sm p-5">
+                    <h2 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
+                      <Activity className="w-5 h-5 text-[#2f5f9f]" /> Health Vitals
+                    </h2>
+                    <HealthMetricLogger key={currentPatientId} patientId={currentPatientId} />
+                  </div>
+                )}
+
+                {/* Sticky bottom nav */}
+                <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-[#d8e2f1] z-40 flex">
+                  {([
+                    { key: "shifts", label: "Clock", icon: <Clock className="w-5 h-5" /> },
+                    { key: "tasks",  label: "Tasks", icon: <Plus className="w-5 h-5" /> },
+                    { key: "vitals", label: "Vitals", icon: <Activity className="w-5 h-5" /> },
+                  ] as const).map((tab) => (
+                    <button
+                      key={tab.key}
+                      onClick={() => setMobileCaregiverTab(tab.key)}
+                      className={`flex-1 flex flex-col items-center gap-1 py-3 text-xs font-semibold transition-colors ${
+                        mobileCaregiverTab === tab.key
+                          ? "text-[#2f5f9f] bg-[#f0f5fd]"
+                          : "text-gray-500 hover:text-gray-700"
+                      }`}
+                    >
+                      {tab.icon}
+                      {tab.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* ── Desktop Tab Navigation (hidden on mobile for caregivers with a patient) ── */}
+            <div className={`${isCaregiver && viewingPatientDetail ? "hidden md:flex" : "flex"} gap-3 mb-8 flex-wrap`}>
               {/* AI Assistant — always first */}
               <button
                 onClick={() => setActiveTab("assistant")}
@@ -427,11 +516,13 @@ export default function DashboardPage() {
               </button>
             </div>
 
-            {/* Tab Content */}
+            {/* Tab Content — hidden on mobile when caregiver has a patient (mobile view handles it above) */}
             {activeTab === "assistant" && (
-              <ChatPanel role={userRole} />
+              <div className={isCaregiver && viewingPatientDetail ? "hidden md:block" : ""}>
+                <ChatPanel role={userRole} />
+              </div>
             )}
-            <div className={`bg-white/95 rounded-2xl shadow-[0_18px_42px_rgba(25,48,88,0.10)] border border-[#d8e2f1] p-8 ${activeTab === "assistant" ? "hidden" : ""}`}>
+            <div className={`bg-white/95 rounded-2xl shadow-[0_18px_42px_rgba(25,48,88,0.10)] border border-[#d8e2f1] p-8 ${activeTab === "assistant" ? "hidden" : ""} ${isCaregiver && viewingPatientDetail ? "hidden md:block" : ""}`}>
               {/* Patient detail loading / error state */}
               {patientLoading && (
                 <div className="flex items-center justify-center py-16">

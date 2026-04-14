@@ -3,7 +3,7 @@
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { Heart, LogOut, Building2, Loader2, Users, BarChart2, Clock, CalendarClock } from "lucide-react";
+import { Heart, LogOut, Building2, Loader2, Users, BarChart2, Clock, CalendarClock, DollarSign, ExternalLink, CheckCircle2, Zap } from "lucide-react";
 import { signOut } from "next-auth/react";
 import { NotificationBell } from "@/components/notifications/NotificationBell";
 import { AdminCaregivers } from "@/components/admin/AdminCaregivers";
@@ -14,7 +14,112 @@ import { AdminSchedule } from "@/components/admin/AdminSchedule";
 import { ChatPanel } from "@/components/chat/ChatPanel";
 import { Bot } from "lucide-react";
 
-type Tab = "assistant" | "caregivers" | "patients" | "shifts" | "schedule" | "analytics";
+type Tab = "assistant" | "caregivers" | "patients" | "shifts" | "schedule" | "analytics" | "hr";
+
+const HR_SERVICES = [
+  {
+    name: "Gusto",
+    category: "Payroll",
+    description: "Run payroll, manage direct deposit, and handle tax filings for your care team.",
+    url: "https://app.gusto.com",
+    color: "from-[#f97316] to-[#ea580c]",
+    badge: "bg-orange-100 text-orange-700",
+    features: ["Automated payroll", "Tax filing", "Direct deposit", "Pay stubs"],
+  },
+  {
+    name: "Gusto Benefits",
+    category: "Benefits",
+    description: "Health insurance, dental, vision, and 401(k) administration for your employees.",
+    url: "https://app.gusto.com/benefits",
+    color: "from-[#8b5cf6] to-[#7c3aed]",
+    badge: "bg-purple-100 text-purple-700",
+    features: ["Health insurance", "Dental & vision", "401(k)", "FSA/HSA"],
+  },
+  {
+    name: "Gusto Time & Attendance",
+    category: "Time Tracking",
+    description: "Track caregiver hours, approve timesheets, and sync with payroll automatically.",
+    url: "https://app.gusto.com/time_and_attendance",
+    color: "from-[#0ea5e9] to-[#0284c7]",
+    badge: "bg-sky-100 text-sky-700",
+    features: ["Time tracking", "Timesheet approval", "Payroll sync", "Overtime alerts"],
+  },
+  {
+    name: "Gusto Hiring",
+    category: "Hiring & Onboarding",
+    description: "Post jobs, collect offer letters, and onboard new caregivers paperlessly.",
+    url: "https://app.gusto.com/hiring",
+    color: "from-[#10b981] to-[#059669]",
+    badge: "bg-emerald-100 text-emerald-700",
+    features: ["Job postings", "Offer letters", "e-Signatures", "Digital onboarding"],
+  },
+];
+
+function HRTab() {
+  return (
+    <div className="space-y-6">
+      {/* Banner */}
+      <div className="bg-gradient-to-r from-[#f97316] to-[#ea580c] rounded-2xl p-6 text-white flex items-center gap-5 shadow-lg">
+        <div className="w-14 h-14 bg-white/20 rounded-2xl flex items-center justify-center flex-shrink-0">
+          <Zap className="w-7 h-7 text-white" />
+        </div>
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-widest text-orange-200 mb-1">Integrations</p>
+          <h2 className="text-2xl font-bold mb-1">Payroll, Benefits & HR</h2>
+          <p className="text-orange-100 text-sm">Quick access to all your Gusto HR tools. Click any card to open the platform.</p>
+        </div>
+      </div>
+
+      {/* Service cards */}
+      <div className="grid sm:grid-cols-2 gap-5">
+        {HR_SERVICES.map((svc) => (
+          <div key={svc.name} className="bg-white rounded-2xl border border-[#d8e2f1] shadow-sm overflow-hidden hover:shadow-md transition-shadow">
+            {/* Card header */}
+            <div className={`bg-gradient-to-r ${svc.color} px-5 py-4 flex items-center justify-between`}>
+              <div>
+                <span className="text-xs font-semibold uppercase tracking-widest text-white/80">{svc.category}</span>
+                <h3 className="text-xl font-bold text-white">{svc.name}</h3>
+              </div>
+              <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center">
+                <DollarSign className="w-5 h-5 text-white" />
+              </div>
+            </div>
+
+            {/* Card body */}
+            <div className="p-5">
+              <p className="text-sm text-gray-600 mb-4 leading-relaxed">{svc.description}</p>
+
+              {/* Feature list */}
+              <ul className="space-y-1.5 mb-5">
+                {svc.features.map((f) => (
+                  <li key={f} className="flex items-center gap-2 text-sm text-gray-700">
+                    <CheckCircle2 className="w-4 h-4 text-green-500 flex-shrink-0" />
+                    {f}
+                  </li>
+                ))}
+              </ul>
+
+              <a
+                href={svc.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center justify-center gap-2 w-full py-2.5 bg-[#2f5f9f] hover:bg-[#224978] text-white font-semibold rounded-xl transition-colors text-sm"
+              >
+                <ExternalLink className="w-4 h-4" />
+                Open {svc.name}
+              </a>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Note */}
+      <p className="text-xs text-gray-400 text-center">
+        These links open Gusto in a new tab. Contact your Gusto account manager to connect your guardian.ai account for automatic sync.
+      </p>
+    </div>
+  );
+}
 
 export default function AdminPage() {
   const { data: session, status } = useSession();
@@ -46,6 +151,7 @@ export default function AdminPage() {
     { key: "schedule", label: "Schedule", icon: <CalendarClock className="w-4 h-4" /> },
     { key: "shifts", label: "Shift Log", icon: <Clock className="w-4 h-4" /> },
     { key: "analytics", label: "Analytics", icon: <BarChart2 className="w-4 h-4" /> },
+    { key: "hr", label: "Payroll & HR", icon: <DollarSign className="w-4 h-4" /> },
   ];
 
   return (
@@ -116,6 +222,8 @@ export default function AdminPage() {
         {/* Tab Content */}
         {activeTab === "assistant" ? (
           <ChatPanel role="ADMIN" />
+        ) : activeTab === "hr" ? (
+          <HRTab />
         ) : (
           <div className="bg-white/95 rounded-2xl shadow-[0_18px_42px_rgba(25,48,88,0.10)] border border-[#d8e2f1] p-8">
             {activeTab === "patients" && <AdminPatients />}
